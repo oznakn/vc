@@ -1,0 +1,10 @@
+#[LALR]
+grammar;
+
+use crate::ast;
+
+pub Identifier: ast::Identifier<'input> =
+    <s:r"[A-Za-z]+[A-Za-z0-9]*"> => ast::Identifier{name: s};
+
+pub NumLiteral: ast::NumLiteral =
+    <s:r"[0-9]+(\.[0-9]+)?"> => ast::NumLiteral::build(s);
