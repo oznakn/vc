@@ -17,9 +17,10 @@ pub fn parse(s: &str) -> Result<ast::Program, ParseError> {
 
 #[cfg(test)]
 mod test {
-    lalrpop_mod!(pub vlang);
-
+    use lalrpop_util::lalrpop_mod;
     use crate::lexer::Lexer;
+
+    lalrpop_mod!(pub vlang);
 
     #[test]
     fn variable_definition_test() {
