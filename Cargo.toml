@@ -11,3 +11,4 @@ lalrpop = "0.17.2"
 [dependencies]
 lalrpop-util = "0.17.2"
 clap = "2.33.0"
+colored = "1.9.1"

@@ -1,7 +1,18 @@
+use std::fs;
+use colored::Colorize;
 use clap::{Arg, App, SubCommand};
+use crate::parser;
 
-fn build_command(input_file: &str) {
-    println!("Running build command for file {}.", input_file);
+fn compile_command(input_file: &str) {
+    let result = fs::read_to_string(input_file);
+
+    if result.is_err() {
+        println!("{} cannot find file: {}", "error:".red(), input_file.blue());
+    } else {
+        let content = result.unwrap();
+
+        parser::parse(&content);
+    }
 }
 
 pub fn run_cli() {
@@ -10,7 +21,7 @@ pub fn run_cli() {
         .author("Ozan Akın")
         .about("Compiles V language, a programming language for CENG444 lecture")
         .subcommand(
-            SubCommand::with_name("build")
+            SubCommand::with_name("compile")
                 .arg(
                     Arg::with_name("input")
                         .help("Sets the input file to use")
@@ -20,9 +31,9 @@ pub fn run_cli() {
         )
         .get_matches();
 
-    if let Some(matches) = matches.subcommand_matches("build") {
+    if let Some(matches) = matches.subcommand_matches("compile") {
         let input_file = matches.value_of("input").unwrap();
 
-        build_command(input_file);
+        compile_command(input_file);
     }
 }

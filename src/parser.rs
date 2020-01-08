@@ -1,6 +1,28 @@
+lalrpop_mod!(pub vlang);
+
+use crate::lexer::Lexer;
+use colored::Colorize;
+
+pub fn parse(s: &str) {
+    let lexer = Lexer::new(s);
+    let parser = vlang::ProgramParser::new();
+
+    let result = parser.parse(lexer);
+
+    if result.is_err() {
+        if let Some(err) = result.err() {
+            println!("{}", err);
+        }
+    } else {
+        result.unwrap();
+
+        println!("{}", "Success".green());
+    }
+}
+
 #[cfg(test)]
 mod test {
-    lalrpop_mod!(pub vc);
+    lalrpop_mod!(pub vlang);
 
     use crate::lexer::Lexer;
 
@@ -9,13 +31,13 @@ mod test {
         let mut lexer;
 
         lexer = Lexer::new("a: int");
-        assert!(vc::VariableParser::new().parse(lexer).is_ok());
+        assert!(vlang::VariableParser::new().parse(lexer).is_ok());
 
         lexer = Lexer::new("a: int");
-        assert!(vc::VariableListParser::new().parse(lexer).is_ok());
+        assert!(vlang::VariableListParser::new().parse(lexer).is_ok());
 
         lexer = Lexer::new("a: int, b: int");
-        assert!(vc::VariableListParser::new().parse(lexer).is_ok());
+        assert!(vlang::VariableListParser::new().parse(lexer).is_ok());
     }
 
     #[test]
@@ -23,16 +45,16 @@ mod test {
         let mut lexer;
 
         lexer = Lexer::new("var a: int, b: int;");
-        assert!(vc::DeclarationStatementParser::new().parse(lexer).is_ok());
+        assert!(vlang::DeclarationStatementParser::new().parse(lexer).is_ok());
 
         lexer = Lexer::new("var a: int, b: real;");
-        assert!(vc::DeclarationStatementParser::new().parse(lexer).is_ok());
+        assert!(vlang::DeclarationStatementParser::new().parse(lexer).is_ok());
 
         lexer = Lexer::new("var a: int[], b: int[];");
-        assert!(vc::DeclarationStatementParser::new().parse(lexer).is_ok());
+        assert!(vlang::DeclarationStatementParser::new().parse(lexer).is_ok());
 
         lexer = Lexer::new("a: int");
-        assert!(vc::DeclarationStatementParser::new().parse(lexer).is_err());
+        assert!(vlang::DeclarationStatementParser::new().parse(lexer).is_err());
     }
 
     #[test]
@@ -40,7 +62,7 @@ mod test {
         let lexer;
 
         lexer = Lexer::new("\"selamlar\"");
-        assert!(vc::StringLiteralParser::new().parse(lexer).is_ok());
+        assert!(vlang::StringLiteralParser::new().parse(lexer).is_ok());
     }
 
     #[test]
@@ -48,12 +70,12 @@ mod test {
         let mut lexer;
 
         lexer = Lexer::new("merhaba");
-        assert!(vc::IdentifierParser::new().parse(lexer).is_ok());
+        assert!(vlang::IdentifierParser::new().parse(lexer).is_ok());
 
         lexer = Lexer::new("__merhaba123");
-        assert!(vc::IdentifierParser::new().parse(lexer).is_ok());
+        assert!(vlang::IdentifierParser::new().parse(lexer).is_ok());
 
         lexer = Lexer::new("23merhaba");
-        assert!(vc::IdentifierParser::new().parse(lexer).is_err());
+        assert!(vlang::IdentifierParser::new().parse(lexer).is_err());
     }
 }
