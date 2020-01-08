@@ -1,9 +1,15 @@
-pub struct Declaration<'input> {
-    pub variable_list: VariableList<'input>,
+#[derive(Clone)]
+pub struct Program<'input> {
+    pub declaration_list: Vec<Declaration<'input>>,
+    pub function_list:  Vec<Function<'input>>,
 }
 
-pub type VariableList<'input> = Vec<Variable<'input>>;
+#[derive(Clone)]
+pub struct Declaration<'input> {
+    pub variable_list: Vec<Variable<'input>>,
+}
 
+#[derive(Clone)]
 pub enum VariableType {
     Int,
     IntVector {
@@ -17,19 +23,16 @@ pub enum VariableType {
     },
 }
 
+#[derive(Clone)]
 pub struct Variable<'input> {
-    pub name: Identifier<'input>,
+    pub name: &'input str,
     pub variable_type: VariableType,
 }
 
-pub struct NumLiteral {
-    pub value: f64,
-}
-
-pub struct Identifier<'input> {
-    pub name: &'input str
-}
-
-pub struct StringLiteral<'input> {
-    pub value: &'input str
+#[derive(Clone)]
+pub struct Function<'input> {
+    pub return_type: VariableType,
+    pub name: &'input str,
+    pub parameter_list: Vec<Variable<'input>>,
+    pub declaration_list: Vec<Declaration<'input>>,
 }

@@ -135,14 +135,10 @@ impl<'input> Lexer<'input> {
         if is_integer {
             let result: i64 = self.source[start..pos].parse::<i64>().unwrap();
 
-            dbg!(result);
-
             return Ok((start, Token::IntLiteral(result), pos));
         }
 
         let result: f64 = self.source[start..pos].parse::<f64>().unwrap();
-
-        dbg!(result);
 
         return Ok((start, Token::RealLiteral(result), pos));
     }
@@ -187,8 +183,6 @@ impl<'input> Lexer<'input> {
         }
         self.next_char();
 
-        dbg!(&self.source[start..pos]);
-
         return Ok((start, Token::StringLiteral(&self.source[start..pos]), pos));
     }
 
@@ -212,8 +206,6 @@ impl<'input> Lexer<'input> {
                 break;
             }
         }
-
-        dbg!(&self.source[start..pos]);
 
         return Ok((start, Token::Identifier(&self.source[start..pos]), pos));
     }

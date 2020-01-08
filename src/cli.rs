@@ -1,18 +1,24 @@
 use std::fs;
-use colored::Colorize;
 use clap::{Arg, App, SubCommand};
 use crate::parser;
 
-fn compile_command(input_file: &str) {
-    let result = fs::read_to_string(input_file);
-
-    if result.is_err() {
-        println!("{} cannot find file: {}", "error:".red(), input_file.blue());
-    } else {
-        let content = result.unwrap();
-
-        parser::parse(&content);
+#[derive(Debug)]
+pub enum CliError<'argument> {
+    FileNotFound {
+        name: &'argument str,
     }
+}
+
+fn compile_command(input_file: &str) -> Result<(), CliError>{
+    let content = fs::read_to_string(input_file).map_err(|_err| {
+        return CliError::FileNotFound {
+            name: input_file,
+        };
+    })?;
+
+    let _p = parser::parse(&content);
+
+    return Ok(());
 }
 
 pub fn run_cli() {

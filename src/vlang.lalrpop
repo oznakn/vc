@@ -8,16 +8,40 @@ use crate::lexer::{
     Location,
 };
 
-pub Program = DeclarationStatement*;
-
-pub DeclarationStatement = "var" VariableList ";";
-
-pub VariableList = Variable ("," Variable)*;
-
-pub Variable: ast::Variable<'input> = <name:Identifier> ":" <variable_type:VariableType> => ast::Variable{
-    name,
-    variable_type,
+#[inline]
+Comma<T>: Vec<T> = {
+    <items: (<T> ",")*> <last: T?> => {
+        let mut items = items;
+        items.extend(last);
+        items
+    }
 };
+
+pub Program: ast::Program<'input> =
+    <declaration_list:DeclarationList> <function_list:FunctionList> => ast::Program {
+        declaration_list,
+        function_list,
+    };
+
+pub DeclarationList
+    = Declaration*;
+
+pub FunctionList
+    = Function*;
+
+pub Declaration: ast::Declaration<'input> =
+    "var" <variable_list:VariableList> ";" => ast::Declaration {
+        variable_list,
+    };
+
+pub VariableList =
+    Comma<Variable>;
+
+pub Variable: ast::Variable<'input> =
+    <name:"identifier"> ":" <variable_type:VariableType> => ast::Variable {
+        name,
+        variable_type,
+    };
 
 pub VariableType: ast::VariableType = {
     "int" => ast::VariableType::Int,
@@ -34,9 +58,16 @@ pub VariableType: ast::VariableType = {
     },
 };
 
-pub Identifier: ast::Identifier<'input> = <s:"identifier"> => ast::Identifier{name: s};
+pub Function: ast::Function<'input> =
+    <return_type:VariableType> "func" <name:"identifier"> "(" <parameter_list:ParameterList> ")" <declaration_list:DeclarationList> "endfunc" =>
+        ast::Function {
+            return_type,
+            name,
+            parameter_list,
+            declaration_list,
+        };
 
-pub StringLiteral: ast::StringLiteral<'input> = <s:"string_literal"> => ast::StringLiteral{value: s};
+pub ParameterList = VariableList;
 
 extern {
     type Location = Location;
