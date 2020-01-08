@@ -8,16 +8,88 @@ use crate::lexer::{
     Location,
 };
 
-pub StringLiteral: ast::StringLiteral<'input> = {
-    <s:"string"> => ast::StringLiteral{value: s}
-}
+pub Program = DeclarationStatement*;
+
+pub DeclarationStatement = "var" VariableList ";";
+
+pub VariableList = Variable ("," Variable)*;
+
+pub Variable: ast::Variable<'input> = <name:Identifier> ":" <variable_type:VariableType> => ast::Variable{
+    name,
+    variable_type,
+};
+
+pub VariableType: ast::VariableType = {
+    "int" => ast::VariableType::Int,
+    "real" => ast::VariableType::Real,
+    "int" "[" "]" => ast::VariableType::IntVector{has_size: false, size: 0},
+    "int" "[" <n:"int_literal"> "]" => ast::VariableType::IntVector {
+        has_size: true,
+        size: n,
+    },
+    "real" "[" "]" => ast::VariableType::RealVector{has_size: true, size: 0},
+    "real" "[" <n:"int_literal"> "]" => ast::VariableType::RealVector {
+        has_size: true,
+        size: n,
+    },
+};
+
+pub Identifier: ast::Identifier<'input> = <s:"identifier"> => ast::Identifier{name: s};
+
+pub StringLiteral: ast::StringLiteral<'input> = <s:"string_literal"> => ast::StringLiteral{value: s};
 
 extern {
     type Location = Location;
     type Error = LexicalError;
 
     enum Token<'input> {
-        "string" => Token::String(<&'input str>),
-        "number" => Token::Number(<f64>),
+        "{" => Token::OpenBrace,
+        "}" => Token::CloseBrace,
+        "[" => Token::OpenBracket,
+        "]" => Token::CloseBracket,
+        "(" => Token::OpenParen,
+        ")" => Token::CloseParen,
+        ";" => Token::Semicolon,
+        "," => Token::Comma,
+        ":" => Token::Colon,
+        "+" => Token::Plus,
+        "-" => Token::Minus,
+        "*" => Token::Star,
+        "/" => Token::Slash,
+        ":=" => Token::Assign,
+        "=" => Token::Equal,
+        "<>" => Token::NotEqual,
+        "<" => Token::Less,
+        "<=" => Token::LessEqual,
+        ">" => Token::Greater,
+        ">=" => Token::GreaterEqual,
+        "var" => Token::Var,
+        "func" => Token::Func,
+        "endfunc" => Token::EndFunc,
+        "return" => Token::Return,
+        "to" => Token::To,
+        "by" => Token::By,
+        "and" => Token::And,
+        "mod" => Token::Mod,
+        "div" => Token::Div,
+        "if" => Token::If,
+        "then" => Token::Then,
+        "else" => Token::Else,
+        "endif" => Token::EndIf,
+        "for" => Token::For,
+        "endfor" => Token::EndFor,
+        "or" => Token::Or,
+        "do" => Token::Do,
+        "print" => Token::Print,
+        "read" => Token::Read,
+        "while" => Token::While,
+        "endwhile" => Token::EndWhile,
+        "not" => Token::Not,
+        "int" => Token::Int,
+        "real" => Token::Real,
+        "identifier" => Token::Identifier(<&'input str>),
+        "string_literal" => Token::StringLiteral(<&'input str>),
+        "int_literal" => Token::IntLiteral(<i64>),
+        "real_literal" => Token::RealLiteral(<f64>),
     }
 }

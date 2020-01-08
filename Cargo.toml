@@ -10,5 +10,4 @@ lalrpop = "0.17.2"
 
 [dependencies]
 lalrpop-util = "0.17.2"
-regex = "0.2.1"
 clap = "2.33.0"
