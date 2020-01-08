@@ -1,11 +1,28 @@
-lalrpop_mod!(pub vc);
+#[cfg(test)]
+mod test {
+    lalrpop_mod!(pub vc);
 
-#[test]
-fn test_parser() {
-    assert!(vc::NumLiteralParser::new().parse("23").is_ok());
-    assert!(vc::NumLiteralParser::new().parse("23.12").is_ok());
+    use crate::lexer::Lexer;
 
-    assert!(vc::IdentifierParser::new().parse("aaa").is_ok());
-    assert!(vc::IdentifierParser::new().parse("1aaa<").is_err());
-    assert!(vc::IdentifierParser::new().parse("1aaa").is_err());
+    #[test]
+    fn string_test() {
+        let mut lexer;
+
+        lexer = Lexer::new("\"selamlar\"");
+        assert!(vc::StringLiteralParser::new().parse(lexer).is_ok());
+    }
+
+    #[test]
+    fn identifier_test() {
+        let mut lexer;
+
+        lexer = Lexer::new("merhaba");
+        assert!(vc::StringLiteralParser::new().parse(lexer).is_ok());
+
+        lexer = Lexer::new("__merhaba123");
+        assert!(vc::StringLiteralParser::new().parse(lexer).is_ok());
+
+        lexer = Lexer::new("23merhaba");
+        assert!(vc::StringLiteralParser::new().parse(lexer).is_err());
+    }
 }
