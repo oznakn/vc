@@ -365,8 +365,6 @@ impl<'input> Iterator for Lexer<'input> {
                             unreachable!();
                         }
                     }
-
-
                 }
             }
         }

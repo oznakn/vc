@@ -1,5 +1,4 @@
-#[LALR]
-grammar<'input>;
+#[LALR] grammar<'input>;
 
 use crate::ast;
 use crate::tokens::Token;
@@ -68,6 +67,169 @@ pub Function: ast::Function<'input> =
         };
 
 pub ParameterList = VariableList;
+
+pub ExpressionList = Comma<Expression>;
+
+pub LExpression: ast::Expression<'input> = {
+    <e1:LExpression> <operator:LogOp> <e2:LExpressionTerm> => ast::Expression::BinaryExpression {
+        left_expression: Box::new(e1),
+        operator,
+        right_expression: Box::new(e2),
+    },
+    LExpressionTerm,
+    // LogOp LExpression,
+};
+
+LExpressionTerm: ast::Expression<'input> = {
+    <e1:Expression> <operator:RelOp> <e2:Expression> => ast::Expression::BinaryExpression {
+        left_expression: Box::new(e1),
+        operator,
+        right_expression: Box::new(e2),
+    },
+    Expression,
+};
+
+#[inline]
+RelOp: ast::BinaryOperator = {
+    "=" => ast::BinaryOperator::Equal,
+    "<>" => ast::BinaryOperator::NotEqual,
+    "<" => ast::BinaryOperator::Less,
+    "<=" => ast::BinaryOperator::LessEqual,
+    ">" => ast::BinaryOperator::Greater,
+    ">=" => ast::BinaryOperator::GreaterEqual,
+};
+
+#[inline]
+LogOp: ast::BinaryOperator = {
+    "and" => ast::BinaryOperator::And,
+    "or" => ast::BinaryOperator::Or,
+};
+
+pub Expression: ast::Expression<'input> = {
+    Term,
+    <e1:Expression> <operator:AddOp> <e2:Term> => ast::Expression::BinaryExpression {
+        left_expression: Box::new(e1),
+        operator,
+        right_expression: Box::new(e2),
+    },
+};
+
+#[inline]
+AddOp: ast::BinaryOperator = {
+    "+" => ast::BinaryOperator::Addition,
+    "-" => ast::BinaryOperator::Subtraction,
+};
+
+Term: ast::Expression<'input> = {
+    <e1:Term> <operator:MulOp> <e2:Factor> => ast::Expression::BinaryExpression {
+        left_expression: Box::new(e1),
+        operator,
+        right_expression: Box::new(e2),
+    },
+    Factor,
+};
+
+#[inline]
+MulOp: ast::BinaryOperator = {
+    "*" => ast::BinaryOperator::Multiplication,
+    "/" => ast::BinaryOperator::Division,
+    "mod" => ast::BinaryOperator::Mod,
+    "div" => ast::BinaryOperator::Div,
+};
+
+Factor: ast::Expression<'input> = {
+    <identifier:"identifier"> "[" <index:"int_literal"> "]" => ast::Expression::VariableExpression {
+        identifier,
+        index,
+        use_index: true,
+    },
+    <identifier:"identifier"> => ast::Expression::VariableExpression {
+        identifier,
+        index: 0,
+        use_index: false,
+    },
+    <identifier:"identifier"> "(" <argument_list:ArgumentList> ")" => ast::Expression::FunctionCallExpression {
+        identifier,
+        argument_list,
+    },
+    "(" <e:Expression> ")" => e,
+    UnaryExpression,
+    "int_literal" => ast::Expression::IntExpression(<>),
+    "real_literal" => ast::Expression::RealExpression(<>),
+};
+
+UnaryExpression: ast::Expression<'input> = {
+    <operator:UnOp> <f:Factor> => ast::Expression::UnaryExpression {
+        operator,
+        expression: Box::new(f)
+    },
+};
+
+#[inline]
+UnOp: ast::UnaryOperator = {
+    "-" => ast::UnaryOperator::Negative,
+};
+
+pub ArgumentList = ExpressionList;
+
+pub StatementList = Statement*;
+
+pub Statement: ast::Statement<'input> = {
+    "print" <parameter_list:PrintableList> => ast::Statement::PrintStatement {
+        parameter_list,
+    },
+    "read" <parameter_list:ReadableList> => ast::Statement::ReadStatement {
+        parameter_list,
+    },
+    "return" <expression:Expression> => ast::Statement::ReturnStatement {
+        expression,
+    },
+    "for" <variable:Variable> "to" <to_expression:Expression> "by" <by_expression:Expression> <statement_list:StatementList> "endfor" => ast::Statement::ForStatement {
+        init_variable: variable,
+        to_expression,
+        by_expression,
+        body: statement_list,
+    },
+    "for" <variable:Variable> "to" <to_expression:Expression> <statement_list:StatementList> "endfor" => ast::Statement::ForStatement {
+        init_variable: variable,
+        to_expression,
+        by_expression: ast::Expression::Empty,
+        body: statement_list,
+    },
+    "if" <expression:LExpression> "then" <statement_list1:StatementList> "else" <statement_list2:StatementList> "endif" => ast::Statement::IfStatement {
+        expression,
+        if_body: statement_list1,
+        else_body: statement_list2,
+        use_else: true,
+    },
+    "if" <expression:LExpression> "then" <statement_list:StatementList> "endif" => ast::Statement::IfStatement {
+        expression,
+        if_body: statement_list,
+        else_body: Vec::new(),
+        use_else: false,
+    },
+};
+
+PrintableList = Comma<Printable>;
+ReadableList = Comma<Readable>;
+
+Printable: ast::Printable<'input> = {
+    <e:Expression> => ast::Printable::Expression(e),
+    <s:"string_literal"> => ast::Printable::String(s),
+};
+
+Readable: ast::Readable<'input> = {
+    <identifier:"identifier"> "[" <index:"int_literal"> "]" => ast::Readable {
+        identifier,
+        index,
+        use_index: true,
+    },
+    <identifier:"identifier"> => ast::Readable {
+        identifier,
+        index: 0,
+        use_index: false,
+    },
+};
 
 extern {
     type Location = Location;
