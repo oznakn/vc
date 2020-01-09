@@ -3,8 +3,10 @@ use std::{
     io,
     fmt,
 };
+use std::error::Error;
 use colored::Colorize;
 use clap::{Arg, App, SubCommand};
+
 use crate::parser;
 use crate::symbol_table;
 
@@ -21,6 +23,7 @@ pub enum CliError<'argument, 'input> {
         error: symbol_table::SymbolTableError<'input>,
     }
 }
+impl<'argument, 'input> Error for CliError<'argument, 'input> {}
 
 impl<'argument, 'input> fmt::Display for CliError<'argument, 'input> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -29,10 +32,10 @@ impl<'argument, 'input> fmt::Display for CliError<'argument, 'input> {
                 write!(f, "File not found: {}", name)
             },
             CliError::ParseError { error } => {
-                write!(f, "ParseError: {} ", error)
+                write!(f, "{} ", error)
             },
             CliError::SymbolTableError { error } => {
-                write!(f, "SymbolTableError: {} ", error)
+                write!(f, "{} ", error)
             }
         };
     }
@@ -40,7 +43,7 @@ impl<'argument, 'input> fmt::Display for CliError<'argument, 'input> {
 
 #[inline]
 fn print_error(err: CliError) {
-    eprintln!("{} {}", "error:".red(), err);
+    println!("{} {}", "error:".red(), err);
 }
 
 fn compile_command(input_file: &str) {

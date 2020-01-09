@@ -1,7 +1,9 @@
 use std::str::CharIndices;
 use std::error::Error;
-use crate::tokens::Token;
 use std::fmt;
+use colored::Colorize;
+
+use crate::tokens::Token;
 
 const EOF: char = '\0';
 
@@ -18,17 +20,16 @@ pub enum LexicalError {
         ch: char,
     },
 }
-
 impl Error for LexicalError {}
 
 impl fmt::Display for LexicalError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         return match self {
-            LexicalError::InvalidChar { location: l, ch } => {
-                write!(f, "Invalid token {} on position {}", ch, l)
+            LexicalError::InvalidChar { location, ch, .. } => {
+                write!(f, "Invalid token `{}` at position {}", format!("{}", ch).purple(), format!("{}", location).blue())
             },
-            LexicalError::MissingChar { location: l, ch } => {
-                write!(f, "Missing token {} on position {}", ch, l)
+            LexicalError::MissingChar { location, ch, .. } => {
+                write!(f, "Missing token `{}` at position {}", format!("{}", ch).purple(), format!("{}", location).blue())
             }
         };
     }
@@ -116,15 +117,50 @@ impl<'input> Lexer<'input> {
         let mut pos = start;
 
         let mut is_integer: bool = true;
+        let mut dot_seen: bool = false;
+        let mut e_seen: bool = false;
+        let mut e_sign_seen: bool = false;
 
         while self.has_char() {
             if self.curr_char().is_numeric() {
                 pos += 1;
 
                 self.next_char();
-            } else if  self.curr_char() == '.' {
+            } else if self.curr_char() == '.' {
+                if dot_seen {
+                    return Err(LexicalError::InvalidChar {
+                        location: self.curr_location(),
+                        ch: self.curr_char(),
+                    });
+                }
+
                 pos += 1;
                 is_integer = false;
+                dot_seen = true;
+
+                self.next_char();
+            } else if self.curr_char() == 'E' || self.curr_char() == 'e' {
+                if !dot_seen || e_seen {
+                    return Err(LexicalError::InvalidChar {
+                        location: self.curr_location(),
+                        ch: self.curr_char(),
+                    });
+                }
+
+                pos += 1;
+                e_seen = true;
+
+                self.next_char();
+            } else if self.curr_char() == '+' || self.curr_char() == '-' {
+                if !dot_seen || !e_seen || e_sign_seen {
+                    return Err(LexicalError::InvalidChar {
+                        location: self.curr_location(),
+                        ch: self.curr_char(),
+                    });
+                }
+
+                pos += 1;
+                e_sign_seen = true;
 
                 self.next_char();
             } else {

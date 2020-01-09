@@ -1,8 +1,9 @@
+use lalrpop_util::ParseError as LParseError;
+
 use crate::lexer;
 use crate::ast;
 use crate::tokens;
 use crate::vlang;
-use lalrpop_util::ParseError as LParseError;
 
 pub type ParseError<'input> = LParseError<lexer::Location, tokens::Token<'input>, lexer::LexicalError>;
 

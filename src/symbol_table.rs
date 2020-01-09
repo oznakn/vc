@@ -1,7 +1,9 @@
 use std::collections::{HashMap, VecDeque, HashSet};
 use std::fmt;
+use std::error::Error;
 
 use crate::ast;
+use colored::Colorize;
 
 #[derive(Debug)]
 pub enum SymbolTableError<'input> {
@@ -21,24 +23,25 @@ pub enum SymbolTableError<'input> {
         name: &'input str,
     },
 }
+impl<'input> Error for SymbolTableError<'input> {}
 
 impl<'input> fmt::Display for SymbolTableError<'input> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         return match self {
             SymbolTableError::VariableAlreadyDefinedError { name } => {
-                write!(f, "Variable already defined: {}", name)
+                write!(f, "Variable `{}` already defined", name.purple())
             },
             SymbolTableError::FunctionAlreadyDefinedError { name } => {
-                write!(f, "Function already defined: {}", name)
+                write!(f, "Function `{}` already defined", name.purple())
             },
             SymbolTableError::VariableNotFoundError { name } => {
-                write!(f, "VariableNotFoundError: {}", name)
+                write!(f, "Variable `{}` not found", name.purple())
             },
             SymbolTableError::VariableTypesNotMatchError { name } => {
-                write!(f, "VariableTypesNotMatchError: {}", name)
+                write!(f, "Wrong type detected on variable `{}`", name.purple())
             },
             SymbolTableError::FunctionNotFoundError { name } => {
-                write!(f, "FunctionNotFoundError: {}", name)
+                write!(f, "Function `{}` not found", name.purple())
             },
         }
     }
@@ -224,11 +227,10 @@ impl<'input> Builder<'input> {
             ast::Expression::BinaryExpression { left_expression, operator: _, right_expression} => {
                 self.expression_queue.push_back(left_expression);
                 self.expression_queue.push_back(right_expression);
-                // TODO: type check for operators
+                // TODO: div applies to int-valued operands only
             },
             ast::Expression::UnaryExpression { expression, operator: _} => {
                 self.expression_queue.push_back(expression);
-                // TODO: type check for operators
             },
             ast::Expression::IntExpression(_) => {},
             ast::Expression::RealExpression(_) => {},
@@ -281,18 +283,15 @@ impl<'input> Builder<'input> {
                 }
             }
 
-            let mut statement_queue = VecDeque::new();
-            let mut expression_queue = VecDeque::new();
-
             for statement in &function.statement_list {
-                statement_queue.push_back(statement);
+                self.statement_queue.push_back(statement);
             }
 
-            while let Some(statement) = statement_queue.pop_front() {
+            while let Some(statement) = self.statement_queue.pop_front() {
                 self.check_statement(&function_scope, statement)?;
             }
 
-            while let Some(expression) = expression_queue.pop_front() {
+            while let Some(expression) = self.expression_queue.pop_front() {
                 self.check_expression(&function_scope, expression)?;
             }
 
