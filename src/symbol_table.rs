@@ -240,7 +240,6 @@ impl<'input> Builder<'input> {
         return Ok(());
     }
 
-    //noinspection ALL
     pub fn build(&mut self) -> Result<(), SymbolTableError<'input>> {
         for declaration in &self.program.declaration_list {
             for variable in &declaration.variable_list {
