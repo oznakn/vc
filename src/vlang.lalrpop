@@ -45,33 +45,58 @@ pub Variable: ast::Variable<'input> =
 pub VariableType: ast::VariableType = {
     "int" => ast::VariableType::Int,
     "real" => ast::VariableType::Real,
-    "int" "[" "]" => ast::VariableType::IntVector{has_size: false, size: 0},
     "int" "[" <n:"int_literal"> "]" => ast::VariableType::IntVector {
-        has_size: true,
         size: n,
     },
-    "real" "[" "]" => ast::VariableType::RealVector{has_size: true, size: 0},
     "real" "[" <n:"int_literal"> "]" => ast::VariableType::RealVector {
-        has_size: true,
         size: n,
     },
 };
 
+pub Parameter: ast::Parameter<'input> =
+    <name:"identifier"> ":" <parameter_type:ParameterType> => ast::Parameter {
+        name,
+        parameter_type,
+    };
+
+
+pub ParameterType: ast::ParameterType = {
+    "int" => ast::ParameterType::Int,
+    "real" => ast::ParameterType::Real,
+    "int" "[" <n:"int_literal"> "]" => ast::ParameterType::IntVector {
+        has_size: true,
+        size: n,
+    },
+    "int" "[" "]" => ast::ParameterType::IntVector {
+        has_size: false,
+        size: 0,
+    },
+    "real" "[" <n:"int_literal"> "]" => ast::ParameterType::RealVector {
+        has_size: true,
+        size: n,
+    },
+    "real" "[" "]" => ast::ParameterType::RealVector {
+        has_size: false,
+        size: 0,
+    },
+};
+
 pub Function: ast::Function<'input> =
-    <return_type:VariableType> "func" <name:"identifier"> "(" <parameter_list:ParameterList> ")" <declaration_list:DeclarationList> "endfunc" =>
+    <return_type:VariableType> "func" <name:"identifier"> "(" <parameter_list:ParameterList> ")" <declaration_list:DeclarationList> <statement_list:StatementList> "endfunc" =>
         ast::Function {
             return_type,
             name,
             parameter_list,
             declaration_list,
+            statement_list,
         };
 
-pub ParameterList = VariableList;
+pub ParameterList = Comma<Parameter>;
 
 pub ExpressionList = Comma<Expression>;
 
 pub LExpression: ast::Expression<'input> = {
-    <e1:LExpression> <operator:LogOp> <e2:LExpressionTerm> => ast::Expression::BinaryExpression {
+    <e1:LExpressionTerm> <operator:LogOp> <e2:LExpression> => ast::Expression::BinaryExpression {
         left_expression: Box::new(e1),
         operator,
         right_expression: Box::new(e2),
@@ -138,16 +163,16 @@ MulOp: ast::BinaryOperator = {
 };
 
 Factor: ast::Expression<'input> = {
-    <identifier:"identifier"> "[" <index:"int_literal"> "]" => ast::Expression::VariableExpression {
+    <identifier:"identifier"> "[" <index:"int_literal"> "]" => ast::Expression::VariableExpression(ast::VariableIdentifier {
         identifier,
         index,
         use_index: true,
-    },
-    <identifier:"identifier"> => ast::Expression::VariableExpression {
+    }),
+    <identifier:"identifier"> => ast::Expression::VariableExpression(ast::VariableIdentifier {
         identifier,
         index: 0,
         use_index: false,
-    },
+    }),
     <identifier:"identifier"> "(" <argument_list:ArgumentList> ")" => ast::Expression::FunctionCallExpression {
         identifier,
         argument_list,
@@ -168,6 +193,7 @@ UnaryExpression: ast::Expression<'input> = {
 #[inline]
 UnOp: ast::UnaryOperator = {
     "-" => ast::UnaryOperator::Negative,
+    "not" => ast::UnaryOperator::Not,
 };
 
 pub ArgumentList = ExpressionList;
@@ -175,56 +201,60 @@ pub ArgumentList = ExpressionList;
 pub StatementList = Statement*;
 
 pub Statement: ast::Statement<'input> = {
-    "print" <parameter_list:PrintableList> => ast::Statement::PrintStatement {
+    "print" <parameter_list:PrintableList> ";" => ast::Statement::PrintStatement {
         parameter_list,
     },
-    "read" <parameter_list:ReadableList> => ast::Statement::ReadStatement {
+    "read" <parameter_list:VariableIdentifierList> ";" => ast::Statement::ReadStatement {
         parameter_list,
     },
-    "return" <expression:Expression> => ast::Statement::ReturnStatement {
+    "return" <expression:Expression> ";" => ast::Statement::ReturnStatement {
         expression,
     },
-    "for" <variable:Variable> "to" <to_expression:Expression> "by" <by_expression:Expression> <statement_list:StatementList> "endfor" => ast::Statement::ForStatement {
+    "for" <variable:Variable> "to" <to_expression:Expression> "by" <by_expression:Expression> <statement_list:StatementList> "endfor" ";" => ast::Statement::ForStatement {
         init_variable: variable,
         to_expression,
         by_expression,
         body: statement_list,
     },
-    "for" <variable:Variable> "to" <to_expression:Expression> <statement_list:StatementList> "endfor" => ast::Statement::ForStatement {
+    "for" <variable:Variable> "to" <to_expression:Expression> <statement_list:StatementList> "endfor" ";" => ast::Statement::ForStatement {
         init_variable: variable,
         to_expression,
         by_expression: ast::Expression::Empty,
         body: statement_list,
     },
-    "if" <expression:LExpression> "then" <statement_list1:StatementList> "else" <statement_list2:StatementList> "endif" => ast::Statement::IfStatement {
+    "if" <expression:LExpression> "then" <statement_list1:StatementList> "else" <statement_list2:StatementList> "endif" ";" => ast::Statement::IfStatement {
         expression,
         if_body: statement_list1,
         else_body: statement_list2,
         use_else: true,
     },
-    "if" <expression:LExpression> "then" <statement_list:StatementList> "endif" => ast::Statement::IfStatement {
+    "if" <expression:LExpression> "then" <statement_list:StatementList> "endif" ";" => ast::Statement::IfStatement {
         expression,
         if_body: statement_list,
         else_body: Vec::new(),
         use_else: false,
     },
+    <variable:VariableIdentifier> ":=" <expression:Expression> ";" => ast::Statement::AssignmentStatement {
+        variable,
+        expression,
+    },
 };
 
 PrintableList = Comma<Printable>;
-ReadableList = Comma<Readable>;
+VariableIdentifierList = Comma<VariableIdentifier>;
 
 Printable: ast::Printable<'input> = {
     <e:Expression> => ast::Printable::Expression(e),
     <s:"string_literal"> => ast::Printable::String(s),
 };
 
-Readable: ast::Readable<'input> = {
-    <identifier:"identifier"> "[" <index:"int_literal"> "]" => ast::Readable {
+VariableIdentifier: ast::VariableIdentifier<'input> = {
+    <identifier:"identifier"> "[" <index:"int_literal"> "]" => ast::VariableIdentifier {
         identifier,
         index,
         use_index: true,
     },
-    <identifier:"identifier"> => ast::Readable {
+    <identifier:"identifier"> => ast::VariableIdentifier {
         identifier,
         index: 0,
         use_index: false,

@@ -283,6 +283,8 @@ impl<'input> Iterator for Lexer<'input> {
                     self.next_char();
 
                     if self.curr_char() == '=' {
+                        self.next_char();
+
                         return Some(Ok((self.curr_location() - 1, Token::Assign, self.curr_location() + 1)));
                     }
 
@@ -297,10 +299,14 @@ impl<'input> Iterator for Lexer<'input> {
                     self.next_char();
 
                     if self.curr_char() == '>' {
+                        self.next_char();
+
                         return Some(Ok((self.curr_location() - 1, Token::NotEqual, self.curr_location() + 1)));
                     }
 
                     if self.curr_char() == '=' {
+                        self.next_char();
+
                         return Some(Ok((self.curr_location() - 1, Token::LessEqual, self.curr_location() + 1)));
                     }
 
@@ -310,6 +316,8 @@ impl<'input> Iterator for Lexer<'input> {
                     self.next_char();
 
                     if self.curr_char() == '=' {
+                        self.next_char();
+
                         return Some(Ok((self.curr_location() - 1, Token::GreaterEqual, self.curr_location() + 1)));
                     }
 
