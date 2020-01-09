@@ -48,9 +48,7 @@ fn compile_command(input_file: &str) {
         Ok(content) => {
             match parser::parse(&content) {
                 Ok(program) => {
-                    let mut table = symbol_table::SymbolTable::new(&program);
-
-                    match table.build() {
+                    match symbol_table::Builder::new(&program).build() {
                         Ok(_) => {
 
                         },
