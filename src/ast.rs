@@ -70,7 +70,6 @@ pub enum ParameterType {
 }
 
 impl ParameterType {
-
     pub fn is_same(&self, variable_type: VariableType) -> bool {
         return match *self {
             ParameterType::Int => {
@@ -133,7 +132,7 @@ pub struct Function<'input> {
 
 #[derive(Clone, Debug)]
 pub struct VariableIdentifier<'input> {
-    pub identifier: &'input str,
+    pub name: &'input str,
     pub use_index: bool,
     pub index: i64,
 }
@@ -144,7 +143,7 @@ pub enum Expression<'input> {
     RealExpression(f64),
     VariableExpression(VariableIdentifier<'input>),
     FunctionCallExpression {
-        identifier: &'input str,
+        name: &'input str,
         argument_list: Vec<Expression<'input>>,
     },
     UnaryExpression {

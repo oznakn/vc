@@ -64,6 +64,7 @@ struct SymbolTableFunctionItem<'input> {
 
 #[derive(Clone, Debug)]
 pub struct SymbolTable<'input> {
+    program: &'input ast::Program<'input>,
     functions: HashMap<&'input str, SymbolTableFunctionItem<'input>>,
     variables: HashMap<&'input str, SymbolTableVariableItem<'input>>,
 }
@@ -79,35 +80,77 @@ impl<'input> SymbolTableFunctionItem<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    fn new() -> Self {
+    pub fn new(program: &'input ast::Program) -> Self {
         return SymbolTable {
             functions: HashMap::new(),
             variables: HashMap::new(),
+            program,
         };
     }
 
-    //noinspection ALL
-    pub fn build(program: &'input ast::Program) -> Result<SymbolTable<'input>, SymbolTableError<'input>> {
-        let mut symbol_table = SymbolTable::new();
+    #[inline]
+    fn check_variable_not_exists(&self, function_scope: &SymbolTableFunctionItem<'input>, name: &'input str) -> Result<bool, SymbolTableError<'input>> {
+        if function_scope.parameters.contains_key(name) || function_scope.variables.contains_key(name) || self.variables.contains_key(name) {
+            return Err(SymbolTableError::VariableAlreadyDefinedError {
+                name: name,
+            });
+        }
 
+        return Ok(true);
+    }
+
+    #[inline]
+    fn check_variable_type_matches(&self, function_scope: &SymbolTableFunctionItem<'input>, variable_identifier: &'input ast::VariableIdentifier<'input>) -> Result<bool, SymbolTableError<'input>> {
+        if let Some(p) = function_scope.parameters.get(variable_identifier.name) {
+            if p.parameter_type.requires_index() != variable_identifier.use_index {
+                return Err(SymbolTableError::VariableTypesNotMatchError {
+                    name: variable_identifier.name,
+                });
+            }
+        }
+        else if let Some(v) = function_scope.variables.get(variable_identifier.name) {
+            if v.variable_type.requires_index() != variable_identifier.use_index {
+                return Err(SymbolTableError::VariableTypesNotMatchError {
+                    name: variable_identifier.name,
+                });
+            }
+        }
+        else if let Some(v) = self.variables.get(variable_identifier.name) {
+            if v.variable_type.requires_index() != variable_identifier.use_index {
+                return Err(SymbolTableError::VariableTypesNotMatchError {
+                    name: variable_identifier.name,
+                });
+            }
+        }
+        else {
+            return Err(SymbolTableError::VariableNotFoundError {
+                name: variable_identifier.name,
+            });
+        }
+
+        return Ok(true);
+    }
+
+    //noinspection ALL
+    pub fn build(&mut self) -> Result<(), SymbolTableError<'input>> {
         let mut function_call_list = HashSet::new();
 
-        for declaration in &program.declaration_list {
+        for declaration in &self.program.declaration_list {
             for variable in &declaration.variable_list {
-                if symbol_table.variables.contains_key(variable.name) {
+                if self.variables.contains_key(variable.name) {
                     return Err(SymbolTableError::VariableAlreadyDefinedError {
                         name: variable.name,
                     });
                 }
 
-                symbol_table.variables.insert(variable.name, SymbolTableVariableItem {
+                self.variables.insert(variable.name, SymbolTableVariableItem {
                     variable_type: &variable.variable_type,
                 });
             }
         }
 
-        for function in &program.function_list {
-            if symbol_table.functions.contains_key(function.name) {
+        for function in &self.program.function_list {
+            if self.functions.contains_key(function.name) {
                 return Err(SymbolTableError::FunctionAlreadyDefinedError {
                     name: function.name,
                 });
@@ -116,28 +159,20 @@ impl<'input> SymbolTable<'input> {
             let mut function_scope = SymbolTableFunctionItem::new(function.name);
 
             for parameter in &function.parameter_list {
-                if function_scope.parameters.contains_key(parameter.name) || symbol_table.variables.contains_key(parameter.name) {
-                    return Err(SymbolTableError::VariableAlreadyDefinedError {
-                        name: parameter.name,
+                if self.check_variable_not_exists(&function_scope, parameter.name)? {
+                    function_scope.parameters.insert(parameter.name, SymbolTableParameterItem {
+                        parameter_type: &parameter.parameter_type,
                     });
                 }
-
-                function_scope.parameters.insert(parameter.name, SymbolTableParameterItem {
-                    parameter_type: &parameter.parameter_type,
-                });
             }
 
             for declaration in &function.declaration_list {
                 for variable in &declaration.variable_list {
-                    if function_scope.parameters.contains_key(variable.name) || function_scope.variables.contains_key(variable.name) || symbol_table.variables.contains_key(variable.name) {
-                        return Err(SymbolTableError::VariableAlreadyDefinedError {
-                            name: variable.name,
+                    if self.check_variable_not_exists(&function_scope, variable.name)? {
+                        function_scope.variables.insert(variable.name, SymbolTableVariableItem {
+                            variable_type: &variable.variable_type,
                         });
                     }
-
-                    function_scope.variables.insert(variable.name, SymbolTableVariableItem {
-                        variable_type: &variable.variable_type,
-                    });
                 }
             }
 
@@ -151,34 +186,9 @@ impl<'input> SymbolTable<'input> {
             while let Some(statement) = statement_queue.pop_front() {
                 match statement {
                     ast::Statement::AssignmentStatement { variable, expression} => {
-                        if let Some(p) = function_scope.parameters.get(variable.identifier) {
-                            if p.parameter_type.requires_index() != variable.use_index {
-                                return Err(SymbolTableError::VariableTypesNotMatchError {
-                                    name: variable.identifier,
-                                });
-                            }
+                        if self.check_variable_type_matches(&function_scope, variable)? {
+                            expression_queue.push_back(expression);
                         }
-                        else if let Some(v) = function_scope.variables.get(variable.identifier) {
-                            if v.variable_type.requires_index() != variable.use_index {
-                                return Err(SymbolTableError::VariableTypesNotMatchError {
-                                    name: variable.identifier,
-                                });
-                            }
-                        }
-                        else if let Some(v) = symbol_table.variables.get(variable.identifier) {
-                            if v.variable_type.requires_index() != variable.use_index {
-                                return Err(SymbolTableError::VariableTypesNotMatchError {
-                                    name: variable.identifier,
-                                });
-                            }
-                        }
-                        else {
-                            return Err(SymbolTableError::VariableNotFoundError {
-                                name: variable.identifier,
-                            });
-                        }
-
-                        expression_queue.push_back(expression);
                     },
                     ast::Statement::PrintStatement { parameter_list } => {
                         for parameter in parameter_list {
@@ -192,32 +202,7 @@ impl<'input> SymbolTable<'input> {
                     },
                     ast::Statement::ReadStatement { parameter_list } => {
                         for parameter in parameter_list {
-                            if let Some(p) = function_scope.parameters.get(parameter.identifier) {
-                                if p.parameter_type.requires_index() != parameter.use_index {
-                                    return Err(SymbolTableError::VariableTypesNotMatchError {
-                                        name: parameter.identifier,
-                                    });
-                                }
-                            }
-                            else if let Some(v) = function_scope.variables.get(parameter.identifier) {
-                                if v.variable_type.requires_index() != parameter.use_index {
-                                    return Err(SymbolTableError::VariableTypesNotMatchError {
-                                        name: parameter.identifier,
-                                    });
-                                }
-                            }
-                            else if let Some(v) = symbol_table.variables.get(parameter.identifier) {
-                                if v.variable_type.requires_index() != parameter.use_index {
-                                    return Err(SymbolTableError::VariableTypesNotMatchError {
-                                        name: parameter.identifier,
-                                    });
-                                }
-                            }
-                            else {
-                                return Err(SymbolTableError::VariableNotFoundError {
-                                    name: parameter.identifier,
-                                });
-                            }
+                            self.check_variable_type_matches(&function_scope, parameter)?;
                         }
                     },
                     ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
@@ -241,38 +226,13 @@ impl<'input> SymbolTable<'input> {
                         }
                     },
                     ast::Statement::ForStatement { init_variable, to_expression, by_expression, body } => {
-                        if let Some(p) = function_scope.parameters.get(init_variable.name) {
-                            if p.parameter_type.requires_index() == init_variable.variable_type.requires_index() {
-                                return Err(SymbolTableError::VariableTypesNotMatchError {
-                                    name: init_variable.name,
-                                });
-                            }
-                        }
-                        else if let Some(v) = function_scope.variables.get(init_variable.name) {
-                            if v.variable_type.requires_index() == init_variable.variable_type.requires_index() {
-                                return Err(SymbolTableError::VariableTypesNotMatchError {
-                                    name: init_variable.name,
-                                });
-                            }
-                        }
-                        else if let Some(v) = symbol_table.variables.get(init_variable.name) {
-                            if v.variable_type.requires_index() == init_variable.variable_type.requires_index() {
-                                return Err(SymbolTableError::VariableTypesNotMatchError {
-                                    name: init_variable.name,
-                                });
-                            }
-                        }
-                        else {
-                            return Err(SymbolTableError::VariableNotFoundError {
-                                name: init_variable.name,
-                            });
-                        }
+                        if self.check_variable_not_exists(&function_scope, init_variable.name)? {
+                            expression_queue.push_back(to_expression);
+                            expression_queue.push_back(by_expression);
 
-                        expression_queue.push_back(to_expression);
-                        expression_queue.push_back(by_expression);
-
-                        for item in body {
-                            statement_queue.push_back(item);
+                            for item in body {
+                                statement_queue.push_back(item);
+                            }
                         }
                     },
                     _ => {}
@@ -281,40 +241,15 @@ impl<'input> SymbolTable<'input> {
 
             while let Some(expression) = expression_queue.pop_front() {
                 match expression {
-                    ast::Expression::FunctionCallExpression { identifier, argument_list } => {
-                        function_call_list.insert(identifier);
+                    ast::Expression::FunctionCallExpression { name, argument_list } => {
+                        function_call_list.insert(name);
 
                         for expression in argument_list {
                             expression_queue.push_back(expression);
                         }
                     },
                     ast::Expression::VariableExpression(variable_identifier) => {
-                        if let Some(p) = function_scope.parameters.get(variable_identifier.identifier) {
-                            if p.parameter_type.requires_index() != variable_identifier.use_index {
-                                return Err(SymbolTableError::VariableTypesNotMatchError {
-                                    name: variable_identifier.identifier,
-                                });
-                            }
-                        }
-                        else if let Some(v) = function_scope.variables.get(variable_identifier.identifier) {
-                            if v.variable_type.requires_index() != variable_identifier.use_index {
-                                return Err(SymbolTableError::VariableTypesNotMatchError {
-                                    name: variable_identifier.identifier,
-                                });
-                            }
-                        }
-                        else if let Some(v) = symbol_table.variables.get(variable_identifier.identifier) {
-                            if v.variable_type.requires_index() != variable_identifier.use_index {
-                                return Err(SymbolTableError::VariableTypesNotMatchError {
-                                    name: variable_identifier.identifier,
-                                });
-                            }
-                        }
-                        else {
-                            return Err(SymbolTableError::VariableNotFoundError {
-                                name: variable_identifier.identifier,
-                            });
-                        }
+                        self.check_variable_type_matches(&function_scope, variable_identifier)?;
                     },
                     ast::Expression::BinaryExpression { left_expression, operator: _, right_expression} => {
                         expression_queue.push_back(left_expression);
@@ -331,19 +266,19 @@ impl<'input> SymbolTable<'input> {
                 }
             }
 
-            symbol_table.functions.insert(function.name, function_scope);
+            self.functions.insert(function.name, function_scope);
         }
 
         for function_name in function_call_list {
-            if !symbol_table.functions.contains_key(function_name) {
+            if !self.functions.contains_key(function_name) {
                 return Err(SymbolTableError::FunctionNotFoundError {
                     name: function_name,
                 });
             }
         }
 
-        dbg!(&symbol_table);
+        dbg!(&self);
 
-        return Ok(symbol_table);
+        return Ok(());
     }
 }

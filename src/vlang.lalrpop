@@ -163,18 +163,18 @@ MulOp: ast::BinaryOperator = {
 };
 
 Factor: ast::Expression<'input> = {
-    <identifier:"identifier"> "[" <index:"int_literal"> "]" => ast::Expression::VariableExpression(ast::VariableIdentifier {
-        identifier,
+    <name:"identifier"> "[" <index:"int_literal"> "]" => ast::Expression::VariableExpression(ast::VariableIdentifier {
+        name,
         index,
         use_index: true,
     }),
-    <identifier:"identifier"> => ast::Expression::VariableExpression(ast::VariableIdentifier {
-        identifier,
+    <name:"identifier"> => ast::Expression::VariableExpression(ast::VariableIdentifier {
+        name,
         index: 0,
         use_index: false,
     }),
-    <identifier:"identifier"> "(" <argument_list:ArgumentList> ")" => ast::Expression::FunctionCallExpression {
-        identifier,
+    <name:"identifier"> "(" <argument_list:ArgumentList> ")" => ast::Expression::FunctionCallExpression {
+        name,
         argument_list,
     },
     "(" <e:Expression> ")" => e,
@@ -249,13 +249,13 @@ Printable: ast::Printable<'input> = {
 };
 
 VariableIdentifier: ast::VariableIdentifier<'input> = {
-    <identifier:"identifier"> "[" <index:"int_literal"> "]" => ast::VariableIdentifier {
-        identifier,
+    <name:"identifier"> "[" <index:"int_literal"> "]" => ast::VariableIdentifier {
+        name,
         index,
         use_index: true,
     },
-    <identifier:"identifier"> => ast::VariableIdentifier {
-        identifier,
+    <name:"identifier"> => ast::VariableIdentifier {
+        name,
         index: 0,
         use_index: false,
     },
