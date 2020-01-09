@@ -50,7 +50,7 @@ mod test {
         assert!(vlang::DeclarationParser::new().parse(lexer).is_ok());
 
         lexer = Lexer::new("var a: int[], b: int[10];");
-        assert!(vlang::DeclarationParser::new().parse(lexer).is_ok());
+        assert!(vlang::DeclarationParser::new().parse(lexer).is_err());
 
         lexer = Lexer::new("a: int");
         assert!(vlang::DeclarationParser::new().parse(lexer).is_err());
