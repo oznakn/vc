@@ -9,6 +9,7 @@ use clap::{Arg, App, SubCommand};
 
 use crate::parser;
 use crate::symbol_table;
+use crate::ir;
 
 #[derive(Debug)]
 pub enum CliError<'argument, 'input> {
@@ -51,8 +52,9 @@ fn compile_command(input_file: &str) {
         Ok(content) => {
             match parser::parse(&content) {
                 Ok(program) => {
-                    match symbol_table::Builder::new(&program).build() {
+                    match symbol_table::Builder::build(&program) {
                         Ok(_) => {
+                            let _ir = ir::Builder::build(&program);
 
                         },
                         Err(err) => {

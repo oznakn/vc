@@ -46,36 +46,38 @@ pub VariableType: ast::VariableType = {
     "int" => ast::VariableType::Int,
     "real" => ast::VariableType::Real,
     "int" "[" <n:"int_literal"> "]" => ast::VariableType::IntVector {
-        size: n,
+        has_size: true,
+        size: n as u64,
     },
     "real" "[" <n:"int_literal"> "]" => ast::VariableType::RealVector {
-        size: n,
+        has_size: true,
+        size: n as u64,
     },
 };
 
 pub Parameter: ast::Parameter<'input> =
-    <name:"identifier"> ":" <parameter_type:ParameterType> => ast::Parameter {
+    <name:"identifier"> ":" <variable_type:ParameterType> => ast::Parameter {
         name,
-        parameter_type,
+        variable_type,
     };
 
 
-pub ParameterType: ast::ParameterType = {
-    "int" => ast::ParameterType::Int,
-    "real" => ast::ParameterType::Real,
-    "int" "[" <n:"int_literal"> "]" => ast::ParameterType::IntVector {
+pub ParameterType: ast::VariableType = {
+    "int" => ast::VariableType::Int,
+    "real" => ast::VariableType::Real,
+    "int" "[" <n:"int_literal"> "]" => ast::VariableType::IntVector {
         has_size: true,
-        size: n,
+        size: n as u64,
     },
-    "int" "[" "]" => ast::ParameterType::IntVector {
+    "int" "[" "]" => ast::VariableType::IntVector {
         has_size: false,
         size: 0,
     },
-    "real" "[" <n:"int_literal"> "]" => ast::ParameterType::RealVector {
+    "real" "[" <n:"int_literal"> "]" => ast::VariableType::RealVector {
         has_size: true,
-        size: n,
+        size: n as u64,
     },
-    "real" "[" "]" => ast::ParameterType::RealVector {
+    "real" "[" "]" => ast::VariableType::RealVector {
         has_size: false,
         size: 0,
     },
@@ -163,20 +165,7 @@ MulOp: ast::BinaryOperator = {
 };
 
 Factor: ast::Expression<'input> = {
-    <name:"identifier"> "[" <index:"int_literal"> "]" => ast::Expression::VariableExpression(ast::VariableIdentifier {
-        name,
-        index,
-        use_index: true,
-    }),
-    <name:"identifier"> => ast::Expression::VariableExpression(ast::VariableIdentifier {
-        name,
-        index: 0,
-        use_index: false,
-    }),
-    <name:"identifier"> "(" <argument_list:ArgumentList> ")" => ast::Expression::FunctionCallExpression {
-        name,
-        argument_list,
-    },
+    <variable_identifier:VariableIdentifier> => ast::Expression::VariableExpression(variable_identifier),
     "(" <e:Expression> ")" => e,
     UnaryExpression,
     "int_literal" => ast::Expression::IntExpression(<>),
@@ -249,15 +238,15 @@ Printable: ast::Printable<'input> = {
 };
 
 VariableIdentifier: ast::VariableIdentifier<'input> = {
-    <name:"identifier"> "[" <index:"int_literal"> "]" => ast::VariableIdentifier {
+    <name:"identifier"> "[" <expression:Expression> "]" => ast::VariableIdentifier {
         name,
-        index,
         use_index: true,
+        expression: Box::new(expression),
     },
     <name:"identifier"> => ast::VariableIdentifier {
         name,
-        index: 0,
         use_index: false,
+        expression: Box::new(ast::Expression::Empty),
     },
 };
 

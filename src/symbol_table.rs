@@ -53,15 +53,9 @@ struct SymbolTableVariableItem<'input> {
 }
 
 #[derive(Clone, Debug)]
-struct SymbolTableParameterItem<'input> {
-    parameter_type: &'input ast::ParameterType,
-}
-
-
-#[derive(Clone, Debug)]
 struct SymbolTableFunctionItem<'input> {
     name: &'input str,
-    parameters: HashMap<&'input str, SymbolTableParameterItem<'input>>,
+    parameters: HashMap<&'input str, SymbolTableVariableItem<'input>>,
     variables: HashMap<&'input str, SymbolTableVariableItem<'input>>,
 }
 
@@ -72,8 +66,6 @@ struct SymbolTable<'input> {
 }
 
 pub struct Builder<'input> {
-    symbol_table: SymbolTable<'input>,
-    program: &'input ast::Program<'input>,
     statement_queue: VecDeque<&'input ast::Statement<'input>>,
     expression_queue: VecDeque<&'input ast::Expression<'input>>,
     function_call_list: HashSet<&'input str>,
@@ -99,19 +91,17 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> Builder<'input> {
-    pub fn new(program: &'input ast::Program) -> Self {
+    fn new() -> Self {
         return Builder {
-            program,
             statement_queue: VecDeque::new(),
             expression_queue: VecDeque::new(),
-            symbol_table: SymbolTable::new(),
             function_call_list: HashSet::new(),
         }
     }
 
     #[inline]
-    fn check_variable_not_exists(&self, function_scope: &SymbolTableFunctionItem<'input>, name: &'input str) -> Result<bool, SymbolTableError<'input>> {
-        if function_scope.parameters.contains_key(name) || function_scope.variables.contains_key(name) || self.symbol_table.variables.contains_key(name) {
+    fn check_variable_not_exists(&self, symbol_table: &SymbolTable<'input>, function_scope: &SymbolTableFunctionItem<'input>, name: &'input str) -> Result<bool, SymbolTableError<'input>> {
+        if function_scope.parameters.contains_key(name) || function_scope.variables.contains_key(name) || symbol_table.variables.contains_key(name) {
             return Err(SymbolTableError::VariableAlreadyDefinedError {
                 name,
             });
@@ -121,9 +111,9 @@ impl<'input> Builder<'input> {
     }
 
     #[inline]
-    fn check_variable_type_matches(&mut self, function_scope: &SymbolTableFunctionItem<'input>, variable_identifier: &'input ast::VariableIdentifier<'input>) -> Result<bool, SymbolTableError<'input>> {
+    fn check_variable_type_matches(&mut self, symbol_table: &SymbolTable<'input>, function_scope: &SymbolTableFunctionItem<'input>, variable_identifier: &'input ast::VariableIdentifier<'input>) -> Result<bool, SymbolTableError<'input>> {
         if let Some(p) = function_scope.parameters.get(variable_identifier.name) {
-            if p.parameter_type.requires_index() != variable_identifier.use_index {
+            if p.variable_type.requires_index() != variable_identifier.use_index {
                 return Err(SymbolTableError::VariableTypesNotMatchError {
                     name: variable_identifier.name,
                 });
@@ -136,7 +126,7 @@ impl<'input> Builder<'input> {
                 });
             }
         }
-        else if let Some(v) = self.symbol_table.variables.get(variable_identifier.name) {
+        else if let Some(v) = symbol_table.variables.get(variable_identifier.name) {
             if v.variable_type.requires_index() != variable_identifier.use_index {
                 return Err(SymbolTableError::VariableTypesNotMatchError {
                     name: variable_identifier.name,
@@ -153,10 +143,10 @@ impl<'input> Builder<'input> {
     }
 
     #[inline]
-    fn check_statement(&mut self, function_scope: &SymbolTableFunctionItem<'input>, statement: &'input ast::Statement<'input>) -> Result<(), SymbolTableError<'input>> {
+    fn check_statement(&mut self, symbol_table: &SymbolTable<'input>, function_scope: &SymbolTableFunctionItem<'input>, statement: &'input ast::Statement<'input>) -> Result<(), SymbolTableError<'input>> {
         match statement {
             ast::Statement::AssignmentStatement { variable, expression} => {
-                if self.check_variable_type_matches(&function_scope, variable)? {
+                if self.check_variable_type_matches(&symbol_table, &function_scope, variable)? {
                     self.expression_queue.push_back(expression);
                 }
             },
@@ -172,7 +162,7 @@ impl<'input> Builder<'input> {
             },
             ast::Statement::ReadStatement { parameter_list } => {
                 for parameter in parameter_list {
-                    self.check_variable_type_matches(&function_scope, parameter)?;
+                    self.check_variable_type_matches(&symbol_table, &function_scope, parameter)?;
                 }
             },
             ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
@@ -196,7 +186,7 @@ impl<'input> Builder<'input> {
                 }
             },
             ast::Statement::ForStatement { init_variable, to_expression, by_expression, body } => {
-                if self.check_variable_not_exists(&function_scope, init_variable.name)? {
+                if self.check_variable_not_exists(&symbol_table, &function_scope, init_variable.name)? {
                     self.expression_queue.push_back(to_expression);
                     self.expression_queue.push_back(by_expression);
 
@@ -205,14 +195,16 @@ impl<'input> Builder<'input> {
                     }
                 }
             },
-            _ => {}
+            ast::Statement::ReturnStatement { expression } => {
+                self.expression_queue.push_back(expression);
+            },
         }
 
         return Ok(());
     }
 
     #[inline]
-    fn check_expression(&mut self, function_scope: &SymbolTableFunctionItem<'input>, expression: &'input ast::Expression<'input>) -> Result<(), SymbolTableError<'input>> {
+    fn check_expression(&mut self, symbol_table: &SymbolTable<'input>, function_scope: &SymbolTableFunctionItem<'input>, expression: &'input ast::Expression<'input>) -> Result<(), SymbolTableError<'input>> {
         match expression {
             ast::Expression::FunctionCallExpression { name, argument_list } => {
                 self.function_call_list.insert(name);
@@ -222,7 +214,7 @@ impl<'input> Builder<'input> {
                 }
             },
             ast::Expression::VariableExpression(variable_identifier) => {
-                self.check_variable_type_matches(&function_scope, variable_identifier)?;
+                self.check_variable_type_matches(&symbol_table, &function_scope, variable_identifier)?;
             },
             ast::Expression::BinaryExpression { left_expression, operator: _, right_expression} => {
                 self.expression_queue.push_back(left_expression);
@@ -240,23 +232,26 @@ impl<'input> Builder<'input> {
         return Ok(());
     }
 
-    pub fn build(&mut self) -> Result<(), SymbolTableError<'input>> {
-        for declaration in &self.program.declaration_list {
+    pub fn build(program: &'input ast::Program<'input>) -> Result<(), SymbolTableError<'input>> {
+        let mut builder = Builder::new();
+        let mut symbol_table = SymbolTable::new();
+
+        for declaration in &program.declaration_list {
             for variable in &declaration.variable_list {
-                if self.symbol_table.variables.contains_key(variable.name) {
+                if symbol_table.variables.contains_key(variable.name) {
                     return Err(SymbolTableError::VariableAlreadyDefinedError {
                         name: variable.name,
                     });
                 }
 
-                self.symbol_table.variables.insert(variable.name, SymbolTableVariableItem {
+                symbol_table.variables.insert(variable.name, SymbolTableVariableItem {
                     variable_type: &variable.variable_type,
                 });
             }
         }
 
-        for function in &self.program.function_list {
-            if self.symbol_table.functions.contains_key(function.name) {
+        for function in &program.function_list {
+            if symbol_table.functions.contains_key(function.name) {
                 return Err(SymbolTableError::FunctionAlreadyDefinedError {
                     name: function.name,
                 });
@@ -265,16 +260,16 @@ impl<'input> Builder<'input> {
             let mut function_scope = SymbolTableFunctionItem::new(function.name);
 
             for parameter in &function.parameter_list {
-                if self.check_variable_not_exists(&function_scope, parameter.name)? {
-                    function_scope.parameters.insert(parameter.name, SymbolTableParameterItem {
-                        parameter_type: &parameter.parameter_type,
+                if builder.check_variable_not_exists(&symbol_table, &function_scope, parameter.name)? {
+                    function_scope.parameters.insert(parameter.name, SymbolTableVariableItem {
+                        variable_type: &parameter.variable_type,
                     });
                 }
             }
 
             for declaration in &function.declaration_list {
                 for variable in &declaration.variable_list {
-                    if self.check_variable_not_exists(&function_scope, variable.name)? {
+                    if builder.check_variable_not_exists(&symbol_table, &function_scope, variable.name)? {
                         function_scope.variables.insert(variable.name, SymbolTableVariableItem {
                             variable_type: &variable.variable_type,
                         });
@@ -283,29 +278,29 @@ impl<'input> Builder<'input> {
             }
 
             for statement in &function.statement_list {
-                self.statement_queue.push_back(statement);
+                builder.statement_queue.push_back(statement);
             }
 
-            while let Some(statement) = self.statement_queue.pop_front() {
-                self.check_statement(&function_scope, statement)?;
+            while let Some(statement) = builder.statement_queue.pop_front() {
+                builder.check_statement(&symbol_table, &function_scope, statement)?;
             }
 
-            while let Some(expression) = self.expression_queue.pop_front() {
-                self.check_expression(&function_scope, expression)?;
+            while let Some(expression) = builder.expression_queue.pop_front() {
+                builder.check_expression(&symbol_table, &function_scope, expression)?;
             }
 
-            self.symbol_table.functions.insert(function.name, function_scope);
+            symbol_table.functions.insert(function.name, function_scope);
         }
 
-        for function_name in &self.function_call_list {
-            if !self.symbol_table.functions.contains_key(function_name) {
+        for function_name in &builder.function_call_list {
+            if !symbol_table.functions.contains_key(function_name) {
                 return Err(SymbolTableError::FunctionNotFoundError {
                     name: function_name,
                 });
             }
         }
 
-        dbg!(&self.symbol_table);
+        // dbg!(&self.symbol_table);
 
         return Ok(());
     }

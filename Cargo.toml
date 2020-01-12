@@ -9,6 +9,7 @@ build   = "build.rs"
 lalrpop = "0.17.2"
 
 [dependencies]
+llvm-sys = "90.0.0"
 lalrpop-util = "0.17.2"
 clap = "2.33.0"
 colored = "1.9.1"

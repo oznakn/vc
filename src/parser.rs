@@ -13,7 +13,7 @@ pub fn parse(s: &str) -> Result<ast::Program, ParseError> {
 
     let program: ast::Program = parser.parse(lexer)?;
 
-    dbg!(&program);
+    // dbg!(&program);
 
     return Ok(program);
 }

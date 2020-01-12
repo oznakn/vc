@@ -33,15 +33,17 @@ pub struct Declaration<'input> {
     pub variable_list: Vec<Variable<'input>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum VariableType {
     Int,
     IntVector {
-        size: i64,
+        size: u64,
+        has_size: bool,
     },
     Real,
     RealVector {
-        size: i64,
+        size: u64,
+        has_size: bool,
     },
 }
 
@@ -53,59 +55,22 @@ impl VariableType {
             _ => false
         };
     }
-}
 
-#[derive(Clone, Debug)]
-pub enum ParameterType {
-    Int,
-    IntVector {
-        has_size: bool,
-        size: i64,
-    },
-    Real,
-    RealVector {
-        has_size: bool,
-        size: i64,
-    },
-}
-
-impl ParameterType {
-    pub fn is_same(&self, variable_type: VariableType) -> bool {
-        return match *self {
-            ParameterType::Int => {
-                match variable_type {
-                    VariableType::Int => true,
-                    _ => false,
-                }
-            },
-            ParameterType::Real => {
-                match variable_type {
-                    VariableType::Real => true,
-                    _ => false,
-                }
-            },
-            ParameterType::IntVector { has_size, size: p_size } => {
-                match variable_type {
-                    VariableType::IntVector { size: v_size } => !has_size || p_size == v_size,
-                    VariableType::RealVector { size: v_size } => !has_size || p_size == v_size, // TODO: upgrade
-                    _ => false,
-                }
-            },
-            ParameterType::RealVector { has_size, size: p_size } => {
-                match variable_type {
-                    VariableType::RealVector { size: v_size } => !has_size || p_size == v_size,
-                    _ => false,
-                }
-            },
-        };
+    pub fn size(&self) -> u64 {
+        return match self {
+            VariableType::Int => 4,
+            VariableType::Real => 8,
+            VariableType::IntVector { size, .. } => (*size) * 4,
+            VariableType::RealVector { size, .. } => (*size) * 8,
+        }
     }
 
-    pub fn requires_index(&self) -> bool {
-        return match *self {
-            ParameterType::IntVector { .. } => true,
-            ParameterType::RealVector { .. } => true,
-            _ => false,
-        };
+    pub fn plain(&self) -> Self {
+        return match self {
+            VariableType::IntVector { .. } => VariableType::Int,
+            VariableType::RealVector { .. } => VariableType::Real,
+            _ => self.clone(),
+        }
     }
 }
 
@@ -118,7 +83,7 @@ pub struct Variable<'input> {
 #[derive(Clone, Debug)]
 pub struct Parameter<'input> {
     pub name: &'input str,
-    pub parameter_type: ParameterType,
+    pub variable_type: VariableType,
 }
 
 #[derive(Clone, Debug)]
@@ -134,7 +99,7 @@ pub struct Function<'input> {
 pub struct VariableIdentifier<'input> {
     pub name: &'input str,
     pub use_index: bool,
-    pub index: i64,
+    pub expression: Box<Expression<'input>>,
 }
 
 #[derive(Clone, Debug)]
