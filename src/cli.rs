@@ -1,6 +1,5 @@
 use std::{
     fs,
-    io,
     fmt,
 };
 use std::error::Error;
@@ -12,33 +11,14 @@ use crate::symbol_table;
 use crate::ir;
 
 #[derive(Debug)]
-pub enum CliError<'argument, 'input> {
-    FileNotFound {
-        name: &'argument str,
-        error: io::Error,
-    },
-    ParseError {
-        error: parser::ParseError<'input>,
-    },
-    SymbolTableError {
-        error: symbol_table::SymbolTableError<'input>,
-    }
+pub struct CliError {
+    error: String,
 }
-impl<'argument, 'input> Error for CliError<'argument, 'input> {}
+impl<'argument, 'input> Error for CliError {}
 
-impl<'argument, 'input> fmt::Display for CliError<'argument, 'input> {
+impl<'argument, 'input> fmt::Display for CliError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        return match self {
-            CliError::FileNotFound { name, .. } => {
-                write!(f, "File not found: {}", name)
-            },
-            CliError::ParseError { error } => {
-                write!(f, "{} ", error)
-            },
-            CliError::SymbolTableError { error } => {
-                write!(f, "{} ", error)
-            }
-        };
+        write!(f, "{}", self.error)
     }
 }
 
@@ -47,37 +27,25 @@ fn print_error(err: CliError) {
     println!("{} {}", "error:".red(), err);
 }
 
-fn compile_command(input_file: &str) {
-    match fs::read_to_string(input_file) {
-        Ok(content) => {
-            match parser::parse(&content) {
-                Ok(program) => {
-                    match symbol_table::Builder::build(&program) {
-                        Ok(_) => {
-                            let _ir = ir::Builder::build(&program);
+fn compile_command(input_file: &str) -> Result<(), CliError>{
+    let content = fs::read_to_string(input_file)
+        .map_err(|_| CliError {
+            error: format!("File not found: {}", input_file),
+        })?;
 
-                        },
-                        Err(err) => {
-                            print_error(CliError::SymbolTableError {
-                                error: err,
-                            });
-                        }
-                    }
-                },
-                Err(err) => {
-                    print_error(CliError::ParseError {
-                        error: err,
-                    });
-                }
-            }
-        },
-        Err(err) => {
-            print_error(CliError::FileNotFound {
-                name: input_file,
-                error: err,
-            });
-        }
-    }
+    let program = parser::parse(&content)
+        .map_err(|err| CliError {
+            error: format!("{}", err),
+        })?;
+
+    symbol_table::Builder::build(&program)
+        .map_err(|err| CliError {
+            error: format!("{}", err),
+        })?;
+
+    let _ir = ir::Builder::build(&program);
+
+    return Ok(());
 }
 
 pub fn run_cli() {
@@ -101,6 +69,8 @@ pub fn run_cli() {
     if let Some(matches) = matches.subcommand_matches("compile") {
         let input_file = matches.value_of("input").unwrap();
 
-        compile_command(input_file);
+        if let Err(err) = compile_command(input_file) {
+            print_error(err);
+        }
     }
 }
