@@ -4,7 +4,7 @@ pub enum UnaryOperator {
     Not,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum BinaryOperator {
     Addition,
     Subtraction,

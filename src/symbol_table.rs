@@ -55,6 +55,7 @@ struct SymbolTableVariableItem<'input> {
 #[derive(Clone, Debug)]
 struct SymbolTableFunctionItem<'input> {
     name: &'input str,
+    return_type: &'input ast::VariableType,
     parameters: HashMap<&'input str, SymbolTableVariableItem<'input>>,
     variables: HashMap<&'input str, SymbolTableVariableItem<'input>>,
 }
@@ -67,14 +68,18 @@ struct SymbolTable<'input> {
 
 pub struct Builder<'input> {
     function_call_list: HashSet<&'input str>,
+    function_parameter_list_map: HashMap<&'input str, Vec<&'input str>>,
+    function_parameter_map: HashMap<&'input str, HashMap<&'input str, &'input ast::VariableType>>,
+    function_return_type_map: HashMap<&'input str, &'input ast::VariableType>,
 }
 
 impl<'input> SymbolTableFunctionItem<'input> {
-    fn new(name: &'input str) -> Self {
+    fn new(name: &'input str, return_type: &'input ast::VariableType) -> Self {
         return SymbolTableFunctionItem {
             name,
-            variables: HashMap::new(),
+            return_type,
             parameters: HashMap::new(),
+            variables: HashMap::new(),
         };
     }
 }
@@ -92,6 +97,9 @@ impl<'input> Builder<'input> {
     fn new() -> Self {
         return Builder {
             function_call_list: HashSet::new(),
+            function_parameter_list_map: HashMap::new(),
+            function_parameter_map: HashMap::new(),
+            function_return_type_map: HashMap::new(),
         }
     }
 
@@ -157,26 +165,42 @@ impl<'input> Builder<'input> {
     fn check_statement(&mut self, symbol_table: &SymbolTable<'input>, function_scope: &SymbolTableFunctionItem<'input>, statement: &'input ast::Statement<'input>) -> Result<(), SymbolTableError<'input>> {
         match statement {
             ast::Statement::AssignmentStatement { variable, expression} => {
-                self.check_variable_type_matches(&symbol_table, &function_scope, variable)?;
-                self.check_expression(symbol_table, function_scope, expression)?;
+                let variable_type = self.check_variable_type_matches(&symbol_table, &function_scope, variable)?;
+                let expression_type = self.check_expression(symbol_table, function_scope, expression)?;
+
+                if variable_type.plain() == ast::VariableType::Int && expression_type.plain() == ast::VariableType::Real {
+                    // TODO: Not allowed
+                }
             },
             ast::Statement::PrintStatement { parameter_list } => {
                 for parameter in parameter_list {
                     match parameter {
                         ast::Printable::String(_) => {},
                         ast::Printable::Expression(e) => {
-                            self.check_expression(symbol_table, function_scope, e)?;
+                            let expression_type = self.check_expression(symbol_table, function_scope, e)?;
+
+                            if expression_type.requires_index() {
+                                // TODO: trying to print a vector
+                            }
                         }
                     }
                 }
             },
             ast::Statement::ReadStatement { parameter_list } => {
                 for parameter in parameter_list {
-                    self.check_variable_type_matches(&symbol_table, &function_scope, parameter)?;
+                    let expression_type = self.check_variable_type_matches(&symbol_table, &function_scope, parameter)?;
+
+                    if expression_type.requires_index() {
+                        // TODO: trying to print a vector
+                    }
                 }
             },
             ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
-                self.check_expression(symbol_table, function_scope, expression)?;
+                let if_expression_type = self.check_expression(symbol_table, function_scope, expression)?;
+
+                if if_expression_type.requires_index() || if_expression_type.plain() == ast::VariableType::Real {
+                    // TODO: error
+                }
 
                 for item in if_body {
                     self.check_statement(symbol_table, function_scope, item)?;
@@ -189,14 +213,18 @@ impl<'input> Builder<'input> {
                 }
             },
             ast::Statement::WhileStatement { expression, body } => {
-                self.check_expression(symbol_table, function_scope, expression)?;
+                let expression_type = self.check_expression(symbol_table, function_scope, expression)?;
+
+                if expression_type.requires_index() || expression_type.plain() == ast::VariableType::Real {
+                    // TODO: error
+                }
 
                 for item in body {
                     self.check_statement(symbol_table, function_scope, item)?;
                 }
             },
             ast::Statement::ForStatement { init_variable, to_expression, by_expression, body } => {
-                if self.check_variable_not_exists(&symbol_table, &function_scope, init_variable.name)? {
+                if self.check_variable_not_exists(&symbol_table, &function_scope, init_variable.name)? { // TODO
                     self.check_expression(symbol_table, function_scope, to_expression)?;
                     self.check_expression(symbol_table, function_scope, by_expression)?;
 
@@ -206,7 +234,11 @@ impl<'input> Builder<'input> {
                 }
             },
             ast::Statement::ReturnStatement { expression } => {
-                self.check_expression(symbol_table, function_scope, expression)?;
+                let expression_type = self.check_expression(symbol_table, function_scope, expression)?;
+
+                if expression_type.requires_index() {
+                    // TODO: error
+                }
             },
         }
 
@@ -214,33 +246,63 @@ impl<'input> Builder<'input> {
     }
 
     #[inline]
-    fn check_expression(&mut self, symbol_table: &SymbolTable<'input>, function_scope: &SymbolTableFunctionItem<'input>, expression: &'input ast::Expression<'input>) -> Result<(), SymbolTableError<'input>> {
-        match expression {
+    fn check_expression(&mut self, symbol_table: &SymbolTable<'input>, function_scope: &SymbolTableFunctionItem<'input>, expression: &'input ast::Expression<'input>) -> Result<ast::VariableType, SymbolTableError<'input>> {
+        return match expression {
             ast::Expression::FunctionCallExpression { name, argument_list } => {
                 self.function_call_list.insert(name);
 
+                let mut argument_types = Vec::new();
+
                 for expression in argument_list {
-                    self.check_expression(symbol_table, function_scope, expression)?;
+                    let expression_type = self.check_expression(symbol_table, function_scope, expression)?;
+
+                    argument_types.push(expression_type);
                 }
+
+                let return_type = self.function_return_type_map.get(*name).unwrap().to_owned();
+                let parameter_list = self.function_parameter_list_map.get(*name).unwrap();
+                let parameters = self.function_parameter_map.get(*name).unwrap();
+
+                let mut i = 0;
+                while i < parameter_list.len() {
+                    let argument = argument_types.get(i).unwrap();
+                    let parameter_name = parameter_list.get(i).unwrap();
+                    let parameter = parameters.get(parameter_name).unwrap();
+
+                    if !argument.is_fits_to_parameter(parameter) {
+                        // TODO: err
+                    }
+
+                    i += 1;
+                }
+
+                return Ok(return_type.clone());
             },
             ast::Expression::VariableExpression(variable_identifier) => {
-                self.check_variable_type_matches(&symbol_table, &function_scope, variable_identifier)?;
+                return Ok(self.check_variable_type_matches(&symbol_table, &function_scope, variable_identifier)?.clone());
             },
-            ast::Expression::BinaryExpression { left_expression, operator: _, right_expression} => {
-                self.check_expression(symbol_table, function_scope, left_expression)?;
-                self.check_expression(symbol_table, function_scope, right_expression)?;
+            ast::Expression::BinaryExpression { left_expression, operator, right_expression} => {
+                let operand1_type = self.check_expression(symbol_table, function_scope, left_expression)?;
+                let operand2_type = self.check_expression(symbol_table, function_scope, right_expression)?;
 
-                // TODO: div applies to int-valued operands only
+                if *operator == ast::BinaryOperator::Div && (operand1_type != ast::VariableType::Int || operand2_type != ast::VariableType::Int) {
+                    // TODO: div applies to int-valued operands only
+                }
+
+                if (operand1_type == ast::VariableType::Int && operand2_type == ast::VariableType::Real)
+                    || (operand1_type == ast::VariableType::Real && operand2_type == ast::VariableType::Int ) {
+                    return Ok(ast::VariableType::Real);
+                }
+
+                return Ok(operand1_type);
             },
             ast::Expression::UnaryExpression { expression, operator: _} => {
-                self.check_expression(symbol_table, function_scope, expression)?;
+                return Ok(self.check_expression(symbol_table, function_scope, expression)?.clone());
             },
-            ast::Expression::IntExpression(_) => {},
-            ast::Expression::RealExpression(_) => {},
+            ast::Expression::IntExpression(_) => Ok(ast::VariableType::Int),
+            ast::Expression::RealExpression(_) => Ok(ast::VariableType::Real),
             ast::Expression::Empty => unreachable!(),
         }
-
-        return Ok(());
     }
 
     pub fn build(program: &'input ast::Program<'input>) -> Result<(), SymbolTableError<'input>> {
@@ -268,7 +330,21 @@ impl<'input> Builder<'input> {
                 });
             }
 
-            let mut function_scope = SymbolTableFunctionItem::new(function.name);
+            let mut parameter_list = Vec::new();
+            let mut parameter_map = HashMap::new();
+
+            for parameter in &function.parameter_list {
+                parameter_map.insert(parameter.name, &parameter.variable_type);
+                parameter_list.push(parameter.name);
+            }
+
+            builder.function_parameter_map.insert(function.name, parameter_map);
+            builder.function_parameter_list_map.insert(function.name, parameter_list);
+            builder.function_return_type_map.insert(function.name, &function.return_type);
+        }
+
+        for function in &program.function_list {
+            let mut function_scope = SymbolTableFunctionItem::new(function.name, &function.return_type);
 
             for parameter in &function.parameter_list {
                 if builder.check_variable_not_exists(&symbol_table, &function_scope, parameter.name)? {

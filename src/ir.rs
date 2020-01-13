@@ -13,9 +13,24 @@ pub struct Function {
     return_type: ast::VariableType,
     stack: Vec<ast::VariableType>,
     stack_map: HashMap<VariableLabel, ast::VariableType>,
-    stack_recycle: Vec<usize>,
-    non_recyclable_items: HashSet<i64>,
     variable_map: HashMap<String, VariableLabel>,
+}
+
+#[derive(Clone, Debug)]
+pub struct IRContext {
+    items: Vec<IRItem>,
+    var_map: HashMap<VariableLabel, ast::VariableType>,
+    variable_map: HashMap<String, VariableLabel>,
+}
+
+impl IRContext {
+    fn new() -> Self {
+        return IRContext {
+            items: Vec::new(),
+            var_map: HashMap::new(),
+            variable_map: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -23,8 +38,8 @@ pub struct Builder {
     function_return_types: HashMap<String, ast::VariableType>,
     labels: HashSet<String>,
     counter: i64,
-    var_map: HashMap<VariableLabel, ast::VariableType>,
-    variable_map: HashMap<String, VariableLabel>,
+    stack_recycle: Vec<usize>,
+    non_recyclable_items: HashSet<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -118,9 +133,7 @@ impl<'input> Function {
             return_type: return_type.clone(),
             stack: Vec::new(),
             stack_map: HashMap::new(),
-            stack_recycle: Vec::new(),
             variable_map: HashMap::new(),
-            non_recyclable_items: HashSet::new(),
         }
     }
 }
@@ -130,8 +143,8 @@ impl<'input> Builder {
         return Builder {
             function_return_types: HashMap::new(),
             labels: HashSet::new(),
-            variable_map: HashMap::new(),
-            var_map: HashMap::new(),
+            stack_recycle: Vec::new(),
+            non_recyclable_items: HashSet::new(),
             counter: -1,
         };
     }
@@ -155,23 +168,23 @@ impl<'input> Builder {
     }
 
     #[inline]
-    fn put_label(&mut self, items: &mut Vec<IRItem>, label: Label) {
-        items.push(IRItem::Label(label));
+    fn put_label(&mut self, ir_context: &mut IRContext, label: Label) {
+        ir_context.items.push(IRItem::Label(label));
     }
 
-    fn generate_var(&mut self, variable_type: &'input ast::VariableType) -> VariableLabel {
+    fn generate_var(&mut self, ir_context: &mut IRContext, variable_type: &'input ast::VariableType) -> VariableLabel {
         let index = self.counter;
 
         self.counter -= 1;
 
-        self.var_map.insert(index, variable_type.clone());
+        ir_context.var_map.insert(index, variable_type.clone());
 
         return index;
     }
 
     #[inline]
-    fn put_var(&mut self, items: &mut Vec<IRItem>, label: VariableLabel, variable_type: &'input ast::VariableType) {
-        items.push(IRItem::Var(label, variable_type.size()));
+    fn put_var(&mut self, ir_context: &mut IRContext, label: VariableLabel, variable_type: &'input ast::VariableType) {
+        ir_context.items.push(IRItem::Var(label, variable_type.size()));
     }
 
     fn generate_local(&mut self, function: &mut Function, variable_type: &'input ast::VariableType) -> VariableLabel {
@@ -179,10 +192,10 @@ impl<'input> Builder {
         let mut index_found = false;
 
         let mut i = 0;
-        while i < function.stack_recycle.len() {
-            if function.stack[function.stack_recycle[i]] == *variable_type {
-                index = function.stack_recycle[i];
-                function.stack_recycle.remove(i);
+        while i < self.stack_recycle.len() {
+            if function.stack[self.stack_recycle[i]] == *variable_type {
+                index = self.stack_recycle[i];
+                self.stack_recycle.remove(i);
 
                 index_found = true;
                 break;
@@ -211,97 +224,97 @@ impl<'input> Builder {
     }
 
     #[inline]
-    fn put_local(&self, items: &mut Vec<IRItem>, label: VariableLabel, variable_type: &'input ast::VariableType) {
-        items.push(IRItem::Local(label, variable_type.size()))
+    fn put_local(&self, ir_context: &mut IRContext, label: VariableLabel, variable_type: &'input ast::VariableType) {
+        ir_context.items.push(IRItem::Local(label, variable_type.size()))
     }
 
     #[inline]
-    fn put_local_from_same_variable_type(&mut self, items: &mut Vec<IRItem>, function: &Function, label: VariableLabel, variable: &VariableLabel) {
+    fn put_local_from_same_variable_type(&mut self, ir_context: &mut IRContext, function: &Function, label: VariableLabel, variable: &VariableLabel) {
         let variable_type = function.stack_map.get(variable).unwrap().to_owned();
 
-        self.put_local(items, label, &variable_type);
+        self.put_local(ir_context, label, &variable_type);
     }
 
-    fn recycle_local(&mut self, function: &mut Function, label: &VariableLabel) {
-        if let None = function.non_recyclable_items.get(label) {
+    fn recycle_local(&mut self, label: &VariableLabel) {
+        if let None = self.non_recyclable_items.get(label) {
             if (*label as i64) > 0 {
-                function.stack_recycle.push(*label as usize);
+                self.stack_recycle.push(*label as usize);
             }
         }
     }
 
     #[inline]
-    fn put_jump(&self, items: &mut Vec<IRItem>, label: Label) {
-        items.push(IRItem::Jump(label));
+    fn put_jump(&self, ir_context: &mut IRContext, label: Label) {
+        ir_context.items.push(IRItem::Jump(label));
     }
 
     #[inline]
-    fn put_bz(&self, items: &mut Vec<IRItem>, label: Label, variable: VariableLabel) {
-        items.push(IRItem::Bz(label, variable));
+    fn put_bz(&self, ir_context: &mut IRContext, label: Label, variable: VariableLabel) {
+        ir_context.items.push(IRItem::Bz(label, variable));
     }
 
     #[inline]
-    fn put_promote(&self, items: &mut Vec<IRItem>, to: VariableLabel, from: VariableLabel) {
-        items.push(IRItem::Promote(to, from));
+    fn put_promote(&self, ir_context: &mut IRContext, to: VariableLabel, from: VariableLabel) {
+        ir_context.items.push(IRItem::Promote(to, from));
     }
 
     #[inline]
-    fn put_print(&self, items: &mut Vec<IRItem>, label: VariableLabel) {
-        items.push(IRItem::Print(label));
+    fn put_print(&self, ir_context: &mut IRContext, label: VariableLabel) {
+        ir_context.items.push(IRItem::Print(label));
     }
 
     #[inline]
-    fn put_print_string(&self, items: &mut Vec<IRItem>, s: String) {
-        items.push(IRItem::PrintString(s));
+    fn put_print_string(&self, ir_context: &mut IRContext, s: String) {
+        ir_context.items.push(IRItem::PrintString(s));
     }
 
     #[inline]
-    fn put_read(&self, items: &mut Vec<IRItem>, label: VariableLabel, size: u64) {
-        items.push(IRItem::Read(label, size));
+    fn put_read(&self, ir_context: &mut IRContext, label: VariableLabel, size: u64) {
+        ir_context.items.push(IRItem::Read(label, size));
     }
 
     #[inline]
-    fn put_load(&mut self, items: &mut Vec<IRItem>, to: VariableLabel, value: i64) {
-        items.push(IRItem::Load(to, value));
+    fn put_load(&mut self, ir_context: &mut IRContext, to: VariableLabel, value: i64) {
+        ir_context.items.push(IRItem::Load(to, value));
     }
 
     #[inline]
-    fn put_move(&self, items: &mut Vec<IRItem>, to: VariableLabel, from: VariableLabel) {
-        items.push(IRItem::Move(to, from));
+    fn put_move(&self, ir_context: &mut IRContext, to: VariableLabel, from: VariableLabel) {
+        ir_context.items.push(IRItem::Move(to, from));
     }
 
     #[inline]
-    fn put_store(&mut self, items: &mut Vec<IRItem>, to: VariablePointer, from: VariableLabel) {
-        items.push(IRItem::Store(to, from));
+    fn put_store(&mut self, ir_context: &mut IRContext, to: VariablePointer, from: VariableLabel) {
+        ir_context.items.push(IRItem::Store(to, from));
     }
 
     #[inline]
-    fn put_fetch(&self, items: &mut Vec<IRItem>, to: VariableLabel, from: VariablePointer) {
-        items.push(IRItem::Fetch(to, from));
+    fn put_fetch(&self, ir_context: &mut IRContext, to: VariableLabel, from: VariablePointer) {
+        ir_context.items.push(IRItem::Fetch(to, from));
     }
 
     #[inline]
-    fn put_op(&self, items: &mut Vec<IRItem>, target: VariableLabel, op: Op, operand1: VariableLabel, operand2: VariableLabel) {
-        items.push(IRItem::Op(target, op, operand1, operand2));
+    fn put_op(&self, ir_context: &mut IRContext, target: VariableLabel, op: Op, operand1: VariableLabel, operand2: VariableLabel) {
+        ir_context.items.push(IRItem::Op(target, op, operand1, operand2));
     }
 
     #[inline]
-    fn put_return(&self, items: &mut Vec<IRItem>) {
-        items.push(IRItem::Return());
+    fn put_return(&self, ir_context: &mut IRContext) {
+        ir_context.items.push(IRItem::Return());
     }
 
     #[inline]
-    fn put_call(&self, items: &mut Vec<IRItem>, label: Label, return_label: VariableLabel, params: Vec<VariableLabel>) {
-        items.push(IRItem::Call(label, return_label, params));
+    fn put_call(&self, ir_context: &mut IRContext, label: Label, return_label: VariableLabel, params: Vec<VariableLabel>) {
+        ir_context.items.push(IRItem::Call(label, return_label, params));
     }
 
-    fn fetch_variable(&mut self, function: &mut Function, variable: &str) -> Option<(VariableLabel, ast::VariableType)> {
+    fn fetch_variable(&mut self, ir_context: &mut IRContext, function: &mut Function, variable: &str) -> Option<(VariableLabel, ast::VariableType)> {
         if let Some(label) = function.variable_map.get(variable) {
             let variable_type = function.stack_map.get(label).unwrap().to_owned();
 
             return Some((*label, variable_type));
-        } else if let Some(label) = self.variable_map.get(variable) {
-            let variable_type = self.var_map.get(label).unwrap().to_owned();
+        } else if let Some(label) = ir_context.variable_map.get(variable) {
+            let variable_type = ir_context.var_map.get(label).unwrap().to_owned();
 
             return Some((*label, variable_type));
         }
@@ -309,21 +322,24 @@ impl<'input> Builder {
         return None;
     }
 
-    fn build_function(&mut self, items: &mut Vec<IRItem>, ast_function: &'input ast::Function) {
+    fn build_function(&mut self, ir_context: &mut IRContext, ast_function: &'input ast::Function) {
+        self.stack_recycle.clear();
+        self.non_recyclable_items.clear();
+
         let mut function = Function::new(ast_function.name, &ast_function.return_type);
         let function_place_in_items: usize;
 
         let label = self.generate_label(ast_function.name, 0);
-        self.put_label(items, label.clone());
+        self.put_label(ir_context, label.clone());
 
-        function_place_in_items = items.len() - 1;
+        function_place_in_items = ir_context.items.len() - 1;
 
         let return_variable = self.generate_local(&mut function, &ast_function.return_type);
-        self.put_local(items, return_variable, &ast_function.return_type); // no need to put non recycle list
+        self.put_local(ir_context, return_variable, &ast_function.return_type); // no need to put non recycle list
 
         for parameter in &ast_function.parameter_list {
             let parameter_label = self.generate_local(&mut function, &parameter.variable_type);
-            self.put_local(items, parameter_label, &parameter.variable_type);
+            self.put_local(ir_context, parameter_label, &parameter.variable_type);
 
             function.variable_map.insert(String::from(parameter.name), parameter_label);
         }
@@ -331,45 +347,45 @@ impl<'input> Builder {
         for declaration in &ast_function.declaration_list {
             for variable in &declaration.variable_list {
                 let label = self.generate_local(&mut function, &variable.variable_type);
-                self.put_local(items, label, &variable.variable_type);
+                self.put_local(ir_context, label, &variable.variable_type);
 
-                self.put_load(items, label, 0);
+                self.put_load(ir_context, label, 0);
 
                 function.variable_map.insert(String::from(variable.name), label);
             }
         }
 
         for ast_statement in &ast_function.statement_list {
-            self.build_statement(items, &mut function, ast_statement);
+            self.build_statement(ir_context, &mut function, ast_statement);
         }
 
-        *items.get_mut(function_place_in_items).unwrap() = IRItem::Function(label, function);
+        *ir_context.items.get_mut(function_place_in_items).unwrap() = IRItem::Function(label, function);
     }
 
     #[allow(dead_code)]
-    fn build_statement(&mut self, items: &mut Vec<IRItem>, function: &mut Function, ast_statement: &'input ast::Statement) {
+    fn build_statement(&mut self, ir_context: &mut IRContext, function: &mut Function, ast_statement: &'input ast::Statement) {
         match ast_statement {
             ast::Statement::AssignmentStatement { variable, expression } => {
-                let mut result = self.build_expression(items, function, expression);
+                let mut result = self.build_expression(ir_context, function, expression);
                 let result_type = function.stack_map.get(&result).unwrap().to_owned();
 
-                let (variable_label, variable_type)  = self.fetch_variable(function, variable.name).unwrap();
+                let (variable_label, variable_type)  = self.fetch_variable(ir_context, function, variable.name).unwrap();
 
                 if variable_type.plain() == ast::VariableType::Real && result_type == ast::VariableType::Int {
                     let temp = self.generate_local(function, &ast::VariableType::Real);
-                    self.put_local(items, temp, &ast::VariableType::Real);
+                    self.put_local(ir_context, temp, &ast::VariableType::Real);
 
-                    self.put_move(items, temp, result);
+                    self.put_move(ir_context, temp, result);
 
                     result = temp;
                 }
 
                 if variable_type.requires_index() {
-                    let index_expression = self.build_expression(items, function, &variable.expression);
+                    let index_expression = self.build_expression(ir_context, function, &variable.expression);
 
-                    self.put_store(items, (variable_label, index_expression), result);
+                    self.put_store(ir_context, (variable_label, index_expression), result);
                 } else {
-                    self.put_move(items, variable_label, result);
+                    self.put_move(ir_context, variable_label, result);
                 }
             },
             ast::Statement::PrintStatement { parameter_list } => {
@@ -380,19 +396,19 @@ impl<'input> Builder {
 
                     match parameter {
                         ast::Printable::Expression(e) => {
-                            let label = self.build_expression(items, function, e);
+                            let label = self.build_expression(ir_context, function, e);
 
-                            self.put_print(items, label);
+                            self.put_print(ir_context, label);
                         },
                         ast::Printable::String(s) => {
-                            self.put_print_string(items, (*s).to_owned());
+                            self.put_print_string(ir_context, (*s).to_owned());
                         },
                     }
 
                     if i == parameter_list.len() - 1 {
-                        self.put_print_string(items, String::from("\\n"));
+                        self.put_print_string(ir_context, String::from("\\n"));
                     } else {
-                        self.put_print_string(items, String::from(" "));
+                        self.put_print_string(ir_context, String::from(" "));
                     }
 
                     i += 1;
@@ -400,37 +416,37 @@ impl<'input> Builder {
             },
             ast::Statement::ReadStatement { parameter_list } => {
                 for parameter in parameter_list {
-                    let (variable_label, variable_type) = self.fetch_variable(function, parameter.name).unwrap();
+                    let (variable_label, variable_type) = self.fetch_variable(ir_context, function, parameter.name).unwrap();
 
                     if !variable_type.requires_index() {
-                        self.put_read(items, variable_label, variable_type.plain().size());
+                        self.put_read(ir_context, variable_label, variable_type.plain().size());
                     } else {
-                        let index_expression = self.build_expression(items, function, &parameter.expression);
+                        let index_expression = self.build_expression(ir_context, function, &parameter.expression);
 
                         let temp = self.generate_local(function, &variable_type.plain());
-                        self.put_local(items, temp, &variable_type.plain());
+                        self.put_local(ir_context, temp, &variable_type.plain());
 
-                        self.put_read(items, temp, variable_type.plain().size());
+                        self.put_read(ir_context, temp, variable_type.plain().size());
 
-                        self.put_store(items, (variable_label, index_expression), temp);
+                        self.put_store(ir_context, (variable_label, index_expression), temp);
                     }
                 }
             },
             ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
-                let if_expression_label = self.build_expression(items, function, expression);
+                let if_expression_label = self.build_expression(ir_context, function, expression);
 
                 let continue_label = self.generate_label(&function.name, 0);
 
-                self.put_bz(items, continue_label.clone(), if_expression_label);
+                self.put_bz(ir_context, continue_label.clone(), if_expression_label);
 
                 for statement in if_body {
-                    self.build_statement(items, function, statement);
+                    self.build_statement(ir_context, function, statement);
                 }
-                self.put_label(items, continue_label);
+                self.put_label(ir_context, continue_label);
 
                 if *use_else {
                     for statement in else_body {
-                        self.build_statement(items, function, statement);
+                        self.build_statement(ir_context, function, statement);
                     }
                 }
             },
@@ -438,155 +454,155 @@ impl<'input> Builder {
                 let start_label = self.generate_label(&function.name, 0);
                 let continue_label = self.generate_label(&function.name, 0);
 
-                self.put_label(items, start_label.clone());
+                self.put_label(ir_context, start_label.clone());
 
-                let expression_label = self.build_expression(items, function, expression);
+                let expression_label = self.build_expression(ir_context, function, expression);
 
-                self.put_bz(items, continue_label.clone(), expression_label);
+                self.put_bz(ir_context, continue_label.clone(), expression_label);
 
                 for statement in body {
-                    self.build_statement(items, function, statement);
+                    self.build_statement(ir_context, function, statement);
                 }
-                self.put_jump(items, start_label);
-                self.put_label(items, continue_label);
+                self.put_jump(ir_context, start_label);
+                self.put_label(ir_context, continue_label);
             },
             ast::Statement::ForStatement { .. } => {
                 // TODO
             },
             ast::Statement::ReturnStatement { expression } => {
-                let variable = self.build_expression(items, function, expression);
+                let variable = self.build_expression(ir_context, function, expression);
 
-                self.put_move(items, 0, variable);
+                self.put_move(ir_context, 0, variable);
 
-                self.put_return(items);
+                self.put_return(ir_context);
             }
         }
     }
 
     #[allow(dead_code)]
-    fn build_expression(&mut self, items: &mut Vec<IRItem>, function: &mut Function, ast_expression: &'input ast::Expression<'input>) -> VariableLabel {
+    fn build_expression(&mut self, ir_context: &mut IRContext, function: &mut Function, ast_expression: &'input ast::Expression<'input>) -> VariableLabel {
         return match ast_expression {
             ast::Expression::FunctionCallExpression { name, argument_list } => {
                 let mut arguments = Vec::new();
 
                 for argument in argument_list {
-                    let expression_label = self.build_expression(items, function, argument);
+                    let expression_label = self.build_expression(ir_context, function, argument);
 
                     arguments.push(expression_label);
                 }
 
                 let return_type = self.function_return_types.get(*name).unwrap().clone();
                 let result_label = self.generate_local(function, &return_type);
-                self.put_local(items, result_label, &function.return_type);
+                self.put_local(ir_context, result_label, &function.return_type);
 
-                self.put_call(items, String::from(&function.name), result_label, arguments.clone());
+                self.put_call(ir_context, String::from(&function.name), result_label, arguments.clone());
 
                 for argument in &arguments {
-                    self.recycle_local(function, argument);
+                    self.recycle_local(argument);
                 }
 
                 result_label
             },
             ast::Expression::VariableExpression(variable_identifier) => {
-                let (variable_label, variable_type) = self.fetch_variable(function, variable_identifier.name).unwrap();
+                let (variable_label, variable_type) = self.fetch_variable(ir_context, function, variable_identifier.name).unwrap();
 
                 if !variable_type.requires_index() {
                     return variable_label;
                 }
 
-                let index_expression = self.build_expression(items, function, &variable_identifier.expression);
+                let index_expression = self.build_expression(ir_context, function, &variable_identifier.expression);
 
                 let label_type = variable_type.plain();
                 let label = self.generate_local(function, &label_type);
-                self.put_local(items, label, &label_type);
+                self.put_local(ir_context, label, &label_type);
 
-                self.put_fetch(items, label, (variable_label, index_expression));
+                self.put_fetch(ir_context, label, (variable_label, index_expression));
 
-                self.recycle_local(function, &index_expression);
+                self.recycle_local(&index_expression);
 
                 label
             },
             ast::Expression::BinaryExpression { left_expression, operator, right_expression} => {
-                let mut operand1 = self.build_expression(items, function, left_expression);
-                let mut operand2 = self.build_expression(items, function, right_expression);
+                let mut operand1 = self.build_expression(ir_context, function, left_expression);
+                let mut operand2 = self.build_expression(ir_context, function, right_expression);
 
                 let mut operand1_type = function.stack_map.get(&operand1).unwrap().to_owned();
                 let operand2_type = function.stack_map.get(&operand2).unwrap().to_owned();
 
                 if operand1_type == ast::VariableType::Int && operand2_type == ast::VariableType::Real {
                     let temp = self.generate_local(function, &ast::VariableType::Real);
-                    self.put_local(items, temp, &ast::VariableType::Real);
+                    self.put_local(ir_context, temp, &ast::VariableType::Real);
 
-                    self.put_promote(items, temp, operand1);
+                    self.put_promote(ir_context, temp, operand1);
 
-                    self.recycle_local(function, &operand1);
+                    self.recycle_local(&operand1);
 
                     operand1 = temp;
                     operand1_type = ast::VariableType::Real;
 
                 } else if operand1_type == ast::VariableType::Real && operand2_type == ast::VariableType::Int {
                     let temp = self.generate_local(function, &ast::VariableType::Real);
-                    self.put_local(items, temp, &ast::VariableType::Real);
+                    self.put_local(ir_context, temp, &ast::VariableType::Real);
 
-                    self.put_promote(items, temp, operand2);
+                    self.put_promote(ir_context, temp, operand2);
 
-                    self.recycle_local(function, &operand2);
+                    self.recycle_local(&operand2);
 
                     operand2 = temp;
                     // operand2_type = ast::VariableType::Real; // not needed since never used later
                 }
 
                 let result_local = self.generate_local(function, &operand1_type.to_owned());
-                self.put_local(items, result_local, &operand1_type.to_owned());
+                self.put_local(ir_context, result_local, &operand1_type.to_owned());
 
                 match operator {
                     ast::BinaryOperator::Addition =>
-                        self.put_op(items, result_local, Op::Add, operand1, operand2),
+                        self.put_op(ir_context, result_local, Op::Add, operand1, operand2),
                     ast::BinaryOperator::Subtraction =>
-                        self.put_op(items, result_local, Op::Sub, operand1, operand2),
+                        self.put_op(ir_context, result_local, Op::Sub, operand1, operand2),
                     ast::BinaryOperator::Multiplication =>
-                        self.put_op(items, result_local, Op::Mul, operand1, operand2),
+                        self.put_op(ir_context, result_local, Op::Mul, operand1, operand2),
                     ast::BinaryOperator::Division =>
-                        self.put_op(items, result_local, Op::Div, operand1, operand2),
+                        self.put_op(ir_context, result_local, Op::Div, operand1, operand2),
                     _ => {},
                 }
 
-                self.recycle_local(function, &operand1);
-                self.recycle_local(function, &operand2);
+                self.recycle_local(&operand1);
+                self.recycle_local(&operand2);
 
                 result_local
             },
             ast::Expression::UnaryExpression { expression, operator: _} => {
-                let operand = self.build_expression(items, function, expression);
+                let operand = self.build_expression(ir_context, function, expression);
 
                 let negate_operand = self.generate_local_from_same_variable_type(function, &operand);
-                self.put_local_from_same_variable_type(items, function, negate_operand, &operand);
+                self.put_local_from_same_variable_type(ir_context, function, negate_operand, &operand);
 
-                self.put_load(items, negate_operand, -1);
+                self.put_load(ir_context, negate_operand, -1);
 
                 let result_local = self.generate_local_from_same_variable_type(function, &operand);
-                self.put_local_from_same_variable_type(items, function, result_local, &operand);
+                self.put_local_from_same_variable_type(ir_context, function, result_local, &operand);
 
-                self.put_op(items, result_local, Op::Mul, negate_operand, operand);
+                self.put_op(ir_context, result_local, Op::Mul, negate_operand, operand);
 
-                self.recycle_local(function, &operand);
-                self.recycle_local(function, &negate_operand);
+                self.recycle_local(&operand);
+                self.recycle_local(&negate_operand);
 
                 result_local
             },
             ast::Expression::IntExpression(value) => {
                 let local = self.generate_local(function, &ast::VariableType::Int);
-                self.put_local(items, local, &ast::VariableType::Int);
+                self.put_local(ir_context, local, &ast::VariableType::Int);
 
-                self.put_load(items, local, *value);
+                self.put_load(ir_context, local, *value);
 
                 local
             },
             ast::Expression::RealExpression(value) => {
                 let local = self.generate_local(function, &ast::VariableType::Real);
-                self.put_local(items, local, &ast::VariableType::Real);
+                self.put_local(ir_context, local, &ast::VariableType::Real);
 
-                self.put_load(items, local, *(value) as i64); // TODO: real representation
+                self.put_load(ir_context, local, *(value) as i64); // TODO: real representation
 
                 local
             },
@@ -594,41 +610,41 @@ impl<'input> Builder {
         }
     }
 
-    fn build_declaration(&mut self, items: &mut Vec<IRItem>, ast_declaration: &'input ast::Declaration<'input>) {
+    fn build_declaration(&mut self, ir_context: &mut IRContext, ast_declaration: &'input ast::Declaration<'input>) {
         for variable in &ast_declaration.variable_list {
             let variable_type = variable.variable_type.clone();
 
-            let label = self.generate_var(&variable_type);
-            self.put_var(items, label, &variable_type);
+            let label = self.generate_var(ir_context, &variable_type);
+            self.put_var(ir_context, label, &variable_type);
 
-            self.put_load(items, label, 0);
+            self.put_load(ir_context, label, 0);
 
-            self.variable_map.insert(String::from(variable.name), label);
+            ir_context.variable_map.insert(String::from(variable.name), label);
         }
     }
 
-    pub fn build(ast_program: &'input ast::Program<'input>) -> Vec<IRItem>  {
+    pub fn build(ast_program: &'input ast::Program<'input>) -> IRContext {
         let mut builder = Builder::new();
-        let mut items: Vec<IRItem> = Vec::new();
+        let mut ir_context = IRContext::new();
 
         let start_label = builder.generate_label("__start__", 0);
-        builder.put_label(&mut items, start_label);
+        builder.put_label(&mut ir_context, start_label);
 
         for ast_declaration in &ast_program.declaration_list {
-            builder.build_declaration(&mut items, &ast_declaration);
+            builder.build_declaration(&mut ir_context, &ast_declaration);
         }
 
-        builder.put_jump(&mut items, String::from("main"));
+        builder.put_jump(&mut ir_context, String::from("main"));
 
         for ast_function in &ast_program.function_list {
             builder.function_return_types.insert(String::from(ast_function.name), ast_function.return_type.clone());
         }
 
         for ast_function in &ast_program.function_list {
-            builder.build_function(&mut items, ast_function);
+            builder.build_function(&mut ir_context, ast_function);
         }
 
-        for item in &items {
+        for item in &ir_context.items {
             match item {
                 IRItem::Label(_) => println!("{}", item),
                 IRItem::Function(_, _) => println!("{}", item),
@@ -636,6 +652,6 @@ impl<'input> Builder {
             }
         }
 
-        return items;
+        return ir_context;
     }
 }
