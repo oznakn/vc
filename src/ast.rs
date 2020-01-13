@@ -49,7 +49,7 @@ pub enum VariableType {
 
 impl VariableType {
     pub fn is_fits_to_parameter(&self, parameter: &VariableType) -> bool {
-        return match self {
+        return match parameter {
             VariableType::IntVector { .. } => self.requires_index() && self.plain() == VariableType::Int,
             VariableType::RealVector { .. } => self.requires_index() && self.plain() == VariableType::Real,
             _ => self.eq(parameter),
