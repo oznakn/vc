@@ -349,8 +349,6 @@ impl<'input> Builder {
                 let label = self.generate_local(&mut function, &variable.variable_type);
                 self.put_local(ir_context, label, &variable.variable_type);
 
-                self.put_load(ir_context, label, 0);
-
                 function.variable_map.insert(String::from(variable.name), label);
             }
         }
@@ -616,8 +614,6 @@ impl<'input> Builder {
 
             let label = self.generate_var(ir_context, &variable_type);
             self.put_var(ir_context, label, &variable_type);
-
-            self.put_load(ir_context, label, 0);
 
             ir_context.variable_map.insert(String::from(variable.name), label);
         }
