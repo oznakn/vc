@@ -38,12 +38,12 @@ fn compile_command(input_file: &str) -> Result<(), CliError>{
             error: format!("{}", err),
         })?;
 
-    symbol_table::Builder::build(&program)
+    let table = symbol_table::SymbolTable::build(&program)
         .map_err(|err| CliError {
             error: format!("{}", err),
         })?;
 
-    let _ir = ir::Builder::build(&program);
+    let _ir = ir::Builder::build(&program, &table);
 
     return Ok(());
 }
