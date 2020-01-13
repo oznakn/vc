@@ -167,6 +167,10 @@ MulOp: ast::BinaryOperator = {
 Factor: ast::Expression<'input> = {
     <variable_identifier:VariableIdentifier> => ast::Expression::VariableExpression(variable_identifier),
     "(" <e:Expression> ")" => e,
+    <name:"identifier"> "(" <argument_list:ExpressionList> ")"=> ast::Expression::FunctionCallExpression {
+        name,
+        argument_list,
+    },
     UnaryExpression,
     "int_literal" => ast::Expression::IntExpression(<>),
     "real_literal" => ast::Expression::RealExpression(<>),
