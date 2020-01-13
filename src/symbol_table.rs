@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::error::Error;
 
@@ -66,8 +66,6 @@ struct SymbolTable<'input> {
 }
 
 pub struct Builder<'input> {
-    statement_queue: VecDeque<&'input ast::Statement<'input>>,
-    expression_queue: VecDeque<&'input ast::Expression<'input>>,
     function_call_list: HashSet<&'input str>,
 }
 
@@ -93,8 +91,6 @@ impl<'input> SymbolTable<'input> {
 impl<'input> Builder<'input> {
     fn new() -> Self {
         return Builder {
-            statement_queue: VecDeque::new(),
-            expression_queue: VecDeque::new(),
             function_call_list: HashSet::new(),
         }
     }
@@ -111,51 +107,65 @@ impl<'input> Builder<'input> {
     }
 
     #[inline]
-    fn check_variable_type_matches(&mut self, symbol_table: &SymbolTable<'input>, function_scope: &SymbolTableFunctionItem<'input>, variable_identifier: &'input ast::VariableIdentifier<'input>) -> Result<bool, SymbolTableError<'input>> {
+    fn check_variable_type_matches(&mut self, symbol_table: &SymbolTable<'input>, function_scope: &SymbolTableFunctionItem<'input>, variable_identifier: &'input ast::VariableIdentifier<'input>) -> Result<ast::VariableType, SymbolTableError<'input>> {
         if let Some(p) = function_scope.parameters.get(variable_identifier.name) {
-            if p.variable_type.requires_index() != variable_identifier.use_index {
+            if !p.variable_type.requires_index() && variable_identifier.use_index {
                 return Err(SymbolTableError::VariableTypesNotMatchError {
                     name: variable_identifier.name,
                 });
             }
+
+            if variable_identifier.use_index {
+                return Ok(p.variable_type.plain());
+            }
+
+            return Ok(p.variable_type.clone());
         }
         else if let Some(v) = function_scope.variables.get(variable_identifier.name) {
-            if v.variable_type.requires_index() != variable_identifier.use_index {
+            if !v.variable_type.requires_index() && variable_identifier.use_index {
                 return Err(SymbolTableError::VariableTypesNotMatchError {
                     name: variable_identifier.name,
                 });
             }
+
+            if variable_identifier.use_index {
+                return Ok(v.variable_type.plain());
+            }
+
+            return Ok(v.variable_type.clone());
         }
         else if let Some(v) = symbol_table.variables.get(variable_identifier.name) {
-            if v.variable_type.requires_index() != variable_identifier.use_index {
+            if !v.variable_type.requires_index() && variable_identifier.use_index {
                 return Err(SymbolTableError::VariableTypesNotMatchError {
                     name: variable_identifier.name,
                 });
             }
-        }
-        else {
-            return Err(SymbolTableError::VariableNotFoundError {
-                name: variable_identifier.name,
-            });
+
+            if variable_identifier.use_index {
+                return Ok(v.variable_type.plain());
+            }
+
+            return Ok(v.variable_type.clone());
         }
 
-        return Ok(true);
+        return Err(SymbolTableError::VariableNotFoundError {
+            name: variable_identifier.name,
+        });
     }
 
     #[inline]
     fn check_statement(&mut self, symbol_table: &SymbolTable<'input>, function_scope: &SymbolTableFunctionItem<'input>, statement: &'input ast::Statement<'input>) -> Result<(), SymbolTableError<'input>> {
         match statement {
             ast::Statement::AssignmentStatement { variable, expression} => {
-                if self.check_variable_type_matches(&symbol_table, &function_scope, variable)? {
-                    self.expression_queue.push_back(expression);
-                }
+                self.check_variable_type_matches(&symbol_table, &function_scope, variable)?;
+                self.check_expression(symbol_table, function_scope, expression)?;
             },
             ast::Statement::PrintStatement { parameter_list } => {
                 for parameter in parameter_list {
                     match parameter {
                         ast::Printable::String(_) => {},
                         ast::Printable::Expression(e) => {
-                            self.expression_queue.push_back(e);
+                            self.check_expression(symbol_table, function_scope, e)?;
                         }
                     }
                 }
@@ -166,37 +176,37 @@ impl<'input> Builder<'input> {
                 }
             },
             ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
-                self.expression_queue.push_back(expression);
+                self.check_expression(symbol_table, function_scope, expression)?;
 
                 for item in if_body {
-                    self.statement_queue.push_back(item);
+                    self.check_statement(symbol_table, function_scope, item)?;
                 }
 
                 if *use_else {
                     for item in else_body {
-                        self.statement_queue.push_back(item);
+                        self.check_statement(symbol_table, function_scope, item)?;
                     }
                 }
             },
             ast::Statement::WhileStatement { expression, body } => {
-                self.expression_queue.push_back(expression);
+                self.check_expression(symbol_table, function_scope, expression)?;
 
                 for item in body {
-                    self.statement_queue.push_back(item);
+                    self.check_statement(symbol_table, function_scope, item)?;
                 }
             },
             ast::Statement::ForStatement { init_variable, to_expression, by_expression, body } => {
                 if self.check_variable_not_exists(&symbol_table, &function_scope, init_variable.name)? {
-                    self.expression_queue.push_back(to_expression);
-                    self.expression_queue.push_back(by_expression);
+                    self.check_expression(symbol_table, function_scope, to_expression)?;
+                    self.check_expression(symbol_table, function_scope, by_expression)?;
 
                     for item in body {
-                        self.statement_queue.push_back(item);
+                        self.check_statement(symbol_table, function_scope, item)?;
                     }
                 }
             },
             ast::Statement::ReturnStatement { expression } => {
-                self.expression_queue.push_back(expression);
+                self.check_expression(symbol_table, function_scope, expression)?;
             },
         }
 
@@ -210,23 +220,24 @@ impl<'input> Builder<'input> {
                 self.function_call_list.insert(name);
 
                 for expression in argument_list {
-                    self.expression_queue.push_back(expression);
+                    self.check_expression(symbol_table, function_scope, expression)?;
                 }
             },
             ast::Expression::VariableExpression(variable_identifier) => {
                 self.check_variable_type_matches(&symbol_table, &function_scope, variable_identifier)?;
             },
             ast::Expression::BinaryExpression { left_expression, operator: _, right_expression} => {
-                self.expression_queue.push_back(left_expression);
-                self.expression_queue.push_back(right_expression);
+                self.check_expression(symbol_table, function_scope, left_expression)?;
+                self.check_expression(symbol_table, function_scope, right_expression)?;
+
                 // TODO: div applies to int-valued operands only
             },
             ast::Expression::UnaryExpression { expression, operator: _} => {
-                self.expression_queue.push_back(expression);
+                self.check_expression(symbol_table, function_scope, expression)?;
             },
             ast::Expression::IntExpression(_) => {},
             ast::Expression::RealExpression(_) => {},
-            ast::Expression::Empty => {},
+            ast::Expression::Empty => unreachable!(),
         }
 
         return Ok(());
@@ -278,15 +289,7 @@ impl<'input> Builder<'input> {
             }
 
             for statement in &function.statement_list {
-                builder.statement_queue.push_back(statement);
-            }
-
-            while let Some(statement) = builder.statement_queue.pop_front() {
                 builder.check_statement(&symbol_table, &function_scope, statement)?;
-            }
-
-            while let Some(expression) = builder.expression_queue.pop_front() {
-                builder.check_expression(&symbol_table, &function_scope, expression)?;
             }
 
             symbol_table.functions.insert(function.name, function_scope);
