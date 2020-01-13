@@ -215,6 +215,10 @@ pub Statement: ast::Statement<'input> = {
         by_expression: ast::Expression::Empty,
         body: statement_list,
     },
+    "while" <expression:LExpression> "do" <statement_list:StatementList> "endwhile" ";" => ast::Statement::WhileStatement {
+        expression,
+        body: statement_list,
+    },
     "if" <expression:LExpression> "then" <statement_list1:StatementList> "else" <statement_list2:StatementList> "endif" ";" => ast::Statement::IfStatement {
         expression,
         if_body: statement_list1,

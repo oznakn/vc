@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Clone, Debug)]
 pub enum UnaryOperator {
     Negative,
@@ -78,6 +80,17 @@ impl VariableType {
             VariableType::IntVector { .. } => VariableType::Int,
             VariableType::RealVector { .. } => VariableType::Real,
             _ => self.clone(),
+        }
+    }
+}
+
+impl fmt::Display for VariableType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return match self {
+            VariableType::Int => write!(f, "int"),
+            VariableType::Real => write!(f, "real"),
+            VariableType::IntVector { size, .. } => write!(f, "int_{}", size),
+            VariableType::RealVector { size, .. } => write!(f, "real_{}", size),
         }
     }
 }
