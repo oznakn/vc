@@ -54,8 +54,6 @@ fn compile_command(input_file: &str) -> Result<(), CliError>{
             error: format!("{}", err),
         })?;
 
-    println!("{}", "Success".green());
-
     return Ok(());
 }
 

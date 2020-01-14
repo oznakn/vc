@@ -64,9 +64,9 @@ impl VariableType {
     pub fn size(&self) -> u64 {
         return match self {
             VariableType::Int => 4,
-            VariableType::Real => 8,
+            VariableType::Real => 4,
             VariableType::IntVector(size, _) => (*size) * 4,
-            VariableType::RealVector(size,_) => (*size) * 8,
+            VariableType::RealVector(size, _) => (*size) * 4,
             VariableType::String(size) => *size,
         }
     }

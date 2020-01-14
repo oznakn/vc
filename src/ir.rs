@@ -1,24 +1,23 @@
-use std::collections::{HashSet, HashMap, VecDeque};
+use std::collections::{HashSet, HashMap};
 use std::fmt;
 
 use crate::ast;
 use crate::symbol_table;
 
 pub const MAIN_FUNCTION: &str = "main";
+pub const ADDRESS_SIZE: u64 = 8; // for 64-bit computer, return address, FEATURE
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum ValueStorage {
     Const(u64),
     Var(u64),
     Local(u64),
-    Temp(u64),
 }
 
 impl fmt::Display for ValueStorage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ValueStorage::Local(i) => write!(f, "_l_{}", i),
-            ValueStorage::Temp(i) => write!(f, "_t_{}", i),
             ValueStorage::Var(i) => write!(f, "_v_{}", i),
             ValueStorage::Const(i) => write!(f, "_c_{}", i),
         }
@@ -154,10 +153,10 @@ impl fmt::Display for IRItem {
 
 #[derive(Clone, Debug)]
 pub struct Function {
-    name: String,
-    return_type: ast::VariableType,
-    stack_list: Vec<(ValueStorage, ast::VariableType, bool)>, // is_temp
-    stack_map: HashMap<ValueStorage, (ast::VariableType, bool)>, // is_temp
+    pub name: String,
+    pub return_type: ast::VariableType,
+    pub stack_list: Vec<(ValueStorage, ast::VariableType, bool)>, // is_temp
+    pub stack_map: HashMap<ValueStorage, (ast::VariableType, bool)>, // is_temp
     variable_label_map: HashMap<String, ValueStorage>,
 }
 
@@ -182,7 +181,6 @@ pub struct IRContext {
     int_map: HashMap<String, ValueStorage>,
     real_map: HashMap<String, ValueStorage>,
     const_map: HashMap<ValueStorage, ast::VariableType>,
-    function_stack_offset_map: HashMap<String, HashMap<ValueStorage, u64>>,
 }
 
 impl IRContext {
@@ -195,9 +193,22 @@ impl IRContext {
             int_map: HashMap::new(),
             real_map: HashMap::new(),
             const_map: HashMap::new(),
-            function_stack_offset_map: HashMap::new(),
         }
     }
+}
+
+pub fn fetch_value_type(ir_context: &IRContext, function: &Function, value_storage: &ValueStorage) -> ast::VariableType {
+    return match value_storage {
+        ValueStorage::Local(_) => {
+            function.stack_map.get(value_storage).unwrap().0.to_owned()
+        },
+        ValueStorage::Var(_) => {
+            ir_context.var_map.get(value_storage).unwrap().to_owned()
+        },
+        ValueStorage::Const(_) => {
+            ir_context.const_map.get(value_storage).unwrap().to_owned()
+        }
+    };
 }
 
 #[derive(Clone, Debug)]
@@ -323,15 +334,16 @@ impl<'input> Builder {
         ir_context.items.push(IRItem::Local(label, variable_type.size()))
     }
 
+    #[allow(unused_variables)]
     fn recycle_local(&mut self, _ir_context: &mut IRContext, function: &Function, label: &ValueStorage) {
-        match label {
+        /* match label {
             ValueStorage::Temp(i) => {
                 if function.stack_map.get(label).unwrap().1 {
                     self.stack_recycle_list.push((*i) as usize);
                 }
             },
             _ => {}
-        }
+        } */
     }
 
     #[inline]
@@ -436,20 +448,7 @@ impl<'input> Builder {
     }
 
     fn fetch_value_type(&mut self, ir_context: &mut IRContext, function: &mut Function, value_storage: &ValueStorage) -> ast::VariableType {
-        return match value_storage {
-            ValueStorage::Local(_) => {
-                function.stack_map.get(value_storage).unwrap().0.to_owned()
-            },
-            ValueStorage::Temp(_) => {
-                function.stack_map.get(value_storage).unwrap().0.to_owned()
-            },
-            ValueStorage::Var(_) => {
-                ir_context.var_map.get(value_storage).unwrap().to_owned()
-            },
-            ValueStorage::Const(_) => {
-                ir_context.const_map.get(value_storage).unwrap().to_owned()
-            }
-        };
+        return fetch_value_type(ir_context, function, value_storage);
     }
 
     fn build_function(&mut self, ir_context: &mut IRContext, symbol_table: &'input symbol_table::SymbolTable<'input>, ast_function: &'input ast::Function, arguments: &Vec<ast::VariableType>) {
@@ -491,7 +490,6 @@ impl<'input> Builder {
         *ir_context.items.get_mut(function_place_in_items).unwrap() = IRItem::Function(label_string, function);
     }
 
-    #[allow(dead_code)]
     fn build_statement(&mut self, ir_context: &mut IRContext, symbol_table: &'input symbol_table::SymbolTable<'input>, function: &mut Function, ast_statement: &'input ast::Statement) {
         match ast_statement {
             ast::Statement::AssignmentStatement { variable, expression } => {
@@ -653,7 +651,6 @@ impl<'input> Builder {
         }
     }
 
-    #[allow(dead_code)]
     fn build_expression(&mut self, ir_context: &mut IRContext, symbol_table: &'input symbol_table::SymbolTable<'input>, function: &mut Function, ast_expression: &'input ast::Expression<'input>) -> ValueStorage {
         match ast_expression {
             ast::Expression::FunctionCallExpression { name, argument_list: argument_expression_list } => {
@@ -800,49 +797,20 @@ impl<'input> Builder {
         }
     }
 
-    pub fn initialize_stack(&mut self, ir_context: &mut IRContext) {
-        let mut current_function = None;
-        let mut local_queue = VecDeque::new();
-
-        let mut function_map = HashMap::new();
-        let mut stack_offset_map = HashMap::new();
-
-        for item in &ir_context.items {
-            match item {
-                IRItem::Function(_, f) =>  {
-                    current_function = Some(f);
-                },
-                IRItem::Local(l, s) => {
-                    local_queue.push_back((l, s));
-                },
-                IRItem::Return() => {
-                    let mut offset: u64 = 0;
-
-                    while let Some((l, s)) = local_queue.pop_back() {
-                        offset += *s;
-
-                        stack_offset_map.insert(l.to_owned(), offset);
-                    }
-
-                    if let Some(f) = current_function {
-                        function_map.insert(f.name.to_owned(), stack_offset_map);
-                    }
-                    stack_offset_map = HashMap::new();
-                },
-                _ => {},
-            }
-        }
-
-        ir_context.function_stack_offset_map = function_map;
-    }
-
     fn initialize_consts(&mut self, ir_context: &mut IRContext, symbol_table: &'input symbol_table::SymbolTable<'input>) {
         for s in &symbol_table.strings {
             let label = self.generate_const(ir_context);
             self.put_const_string(ir_context, label.to_owned(), (*s).to_owned());
 
-            ir_context.string_map.insert((*s).to_owned(), (label.clone(), s.len() as u64));
-            ir_context.const_map.insert(label, ast::VariableType::String(s.len() as u64));
+            let size = s.to_string()
+                .clone()
+                .replace("\\n", " ")
+                .replace("\\r", " ")
+                .replace("\\\"", " ")
+                .len() as u64;
+
+            ir_context.string_map.insert((*s).to_owned(), (label.clone(), size));
+            ir_context.const_map.insert(label, ast::VariableType::String(size));
         }
 
         for v in &symbol_table.ints {
@@ -886,16 +854,14 @@ impl<'input> Builder {
             }
         }
 
-        builder.initialize_stack(&mut ir_context);
-
         // For debugging purposes
-        for item in &ir_context.items {
+        /* for item in &ir_context.items {
             match item {
                 IRItem::Label(_) => println!("{}", item),
                 IRItem::Function(_, _) => println!("{}", item),
                 _ => println!("    {}", item),
             }
-        }
+        } */
 
         return ir_context;
     }
