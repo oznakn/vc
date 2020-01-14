@@ -47,7 +47,7 @@ fn compile_command(input_file: &str) -> Result<(), CliError>{
 
     let generated_code = codegen::CodeGenerator::build(&ir_context);
 
-    let output_file = format!("{}.s", Path::new(&input_file).file_stem().unwrap().to_str().unwrap());
+    let output_file = format!("{}.S", Path::new(&input_file).file_stem().unwrap().to_str().unwrap());
 
     fs::write(Path::new(&output_file), codegen::convert_to_string(&generated_code))
         .map_err(|err| CliError {

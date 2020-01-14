@@ -7,7 +7,7 @@ use crate::ast;
 use crate::MAIN_FUNCTION;
 
 const START_LABEL: &str = "_start";
-const ADDRESS_SIZE: u64 = 8;
+const FULL_WIDTH_SIZE: u64 = 8;
 
 #[derive(Clone, Debug)]
 pub enum GeneratedCodeItem {
@@ -108,7 +108,7 @@ impl<'ir> CodeGenerator<'ir> {
                         offset += *s;
                     }
 
-                    offset += ADDRESS_SIZE; // return address
+                    offset += FULL_WIDTH_SIZE; // return address
 
                     if let Some(f) = current_function {
                         function_map.insert(f.name.to_owned(), (offset, stack_offset_map));
@@ -143,96 +143,125 @@ impl<'ir> CodeGenerator<'ir> {
         }
     }
 
-    fn to_asm_repr(&self, s: &'ir ir::ValueStorage) -> String {
+    #[inline]
+    fn get_stack_offset_map(&self) -> &HashMap<ir::ValueStorage, u64> {
+        return &self.function_stack_offset_map.get(&self.current_function.unwrap().name).unwrap().1;
+    }
+
+    #[inline]
+    fn get_jump_address(&self) -> String {
+        let offset = &self.function_stack_offset_map.get(&self.current_function.unwrap().name).unwrap().0;
+
+        return format!("{}(sp)", *offset - FULL_WIDTH_SIZE);
+    }
+
+    #[inline]
+    fn get_return_address(&self) -> String {
+        return self.value_storage_to_string(&self.current_function.unwrap().stack_list.get(0).unwrap().0);
+    }
+
+    fn value_storage_to_string(&self, s: &'ir ir::ValueStorage) -> String {
         return match s {
+            ir::ValueStorage::Const(i) => {
+                format!("C{}", i)
+            },
+            ir::ValueStorage::Var(i) => {
+                format!("V{}", i)
+            },
             ir::ValueStorage::Local(_) => {
-                let stack_offset_map = &self.function_stack_offset_map.get(&self.current_function.unwrap().name).unwrap().1;
+                let stack_offset_map = self.get_stack_offset_map();
 
                 format!("{}(sp)", stack_offset_map.get(s).unwrap())
             },
-            _ => {
-                format!("{}", s)
-            }
         }
     }
 
-    fn load_value_storage(&mut self, ir_context: &'ir ir::IRContext, s: &'ir ir::ValueStorage, register: &str) {
-        let value_type = fetch_variable_type(ir_context, self.current_function.unwrap(), s);
+    fn load_value_storage_to_register(&mut self, ir_context: &'ir ir::IRContext, storage: &'ir ir::ValueStorage, register: &str) {
+        let variable_type = fetch_variable_type(ir_context, self.current_function.unwrap(), storage);
 
-        match s {
-            ir::ValueStorage::Local(_) => {
-                let stack_offset_map = &self.function_stack_offset_map.get(&self.current_function.unwrap().name).unwrap().1;
+        let mut instruction_option = None;
 
-                self.items.push(GeneratedCodeItem::Instruction("lw".to_string(), vec![register.to_string(), format!("{}(sp)", stack_offset_map.get(s).unwrap())]));
-            },
-            _ => {
-                match value_type {
-                    ast::VariableType::String(_) => {
-                        self.items.push(GeneratedCodeItem::Instruction("la".to_string(), vec![register.to_string(), format!("{}", s)]));
+        match variable_type {
+            ast::VariableType::String(_) => instruction_option = Some("la"),
+            _ =>
+                match storage {
+                    ir::ValueStorage::Local(_) => {
+                        if variable_type.size() == FULL_WIDTH_SIZE {
+                            instruction_option = Some("ld");
+                        } else if variable_type.size() == FULL_WIDTH_SIZE / 2 {
+                            instruction_option = Some("lw");
+                        }
                     },
-                    _ => {
-                        self.items.push(GeneratedCodeItem::Instruction("lw".to_string(), vec![register.to_string(), format!("{}", s)]));
-                    }
+                    _ => instruction_option = Some("la"),
                 }
-            }
+        }
+
+        if let Some(instruction) = instruction_option {
+            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec![register.to_string(), self.value_storage_to_string(storage)]));
         }
     }
 
-    fn store_value_storage(&mut self, ir_context: &'ir ir::IRContext, s: &'ir ir::ValueStorage, register: &str) {
-        let value_type = fetch_variable_type(ir_context, self.current_function.unwrap(), s);
+    fn store_register_to_value_storage(&mut self, ir_context: &'ir ir::IRContext, storage: &'ir ir::ValueStorage, register: &str) {
+        let variable_type = fetch_variable_type(ir_context, self.current_function.unwrap(), storage);
 
-        match s {
-            ir::ValueStorage::Local(_) => {
-                let stack_offset_map = &self.function_stack_offset_map.get(&self.current_function.unwrap().name).unwrap().1;
+        let mut instruction_option = None;
 
-                self.items.push(GeneratedCodeItem::Instruction("sw".to_string(), vec![register.to_string(), format!("{}(sp)", stack_offset_map.get(s).unwrap())]));
-            },
-            _ => {
-                match value_type {
-                    ast::VariableType::String(_) => {},
-                    _ => {
-                        self.items.push(GeneratedCodeItem::Instruction("sw".to_string(), vec![register.to_string(), format!("{}", s)]));
-                    }
+        match variable_type {
+            ast::VariableType::String(_) => {},
+            _ =>
+                match storage {
+                    ir::ValueStorage::Local(_) => {
+                        if variable_type.size() == FULL_WIDTH_SIZE {
+                            instruction_option = Some("sd");
+                        } else if variable_type.size() == FULL_WIDTH_SIZE / 2 {
+                            instruction_option = Some("sw");
+                        }
+                    },
+                    ir::ValueStorage::Var(_) => instruction_option = Some("la"),
+                    _ => {},
                 }
-            }
+        }
+
+        if let Some(instruction) = instruction_option {
+            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec![register.to_string(), self.value_storage_to_string(storage)]));
         }
     }
 
     fn visit(&mut self, ir_context: &'ir ir::IRContext, ir_item: &'ir ir::IRItem) {
         match ir_item {
-            ir::IRItem::ConstString(label, s) => {
-                self.check_data_section();
+            ir::IRItem::ConstString(storage, s) => {
+                self.check_ro_data_section();
 
-                self.items.push(GeneratedCodeItem::Label(format!("{}", label)));
+                self.items.push(GeneratedCodeItem::Label(format!("{}", self.value_storage_to_string(storage))));
                 self.items.push(GeneratedCodeItem::Instruction(".string".to_string(), vec![format!("\"{}\"", s)])); // .ascii .asciz
             },
-            ir::IRItem::ConstInt(label, v) => {
-                self.check_data_section();
+            ir::IRItem::ConstInt(storage, v) => {
+                self.check_ro_data_section();
 
-                self.items.push(GeneratedCodeItem::Label(format!("{}", label)));
+                self.items.push(GeneratedCodeItem::Label(format!("{}", self.value_storage_to_string(storage))));
                 self.items.push(GeneratedCodeItem::Instruction(".word".to_string(), vec![format!("{}", v)]));
             },
-            ir::IRItem::ConstReal(label, v) => {
+            ir::IRItem::ConstReal(storage, v) => {
+                self.check_ro_data_section();
+
+                self.items.push(GeneratedCodeItem::Label(format!("{}", self.value_storage_to_string(storage))));
+                self.items.push(GeneratedCodeItem::Instruction(".double".to_string(), vec![format!("{:.4}", v)]));
+            },
+            ir::IRItem::Var(storage, size) => {
                 self.check_data_section();
 
-                self.items.push(GeneratedCodeItem::Label(format!("{}", label)));
-                self.items.push(GeneratedCodeItem::Instruction(".float".to_string(), vec![format!("{:.4}", v)]));
+                self.items.push(GeneratedCodeItem::Label(format!("{}", self.value_storage_to_string(storage))));
+                self.items.push(GeneratedCodeItem::Instruction(".zero".to_string(), vec![format!("{}", size)]));
             },
             ir::IRItem::Start() => {
                 self.check_text_section();
 
                 self.items.push(GeneratedCodeItem::Label(START_LABEL.to_owned()));
 
-                self.items.push(GeneratedCodeItem::Instruction("jal".to_owned(), vec!["ra".to_owned(), MAIN_FUNCTION.to_owned()])); // TODO: change later
-                self.items.push(GeneratedCodeItem::Instruction("addi".to_owned(), vec!["a0".to_owned(), "x0".to_owned(), "0".to_owned()])); // TODO: change later
+                self.items.push(GeneratedCodeItem::Instruction("jal".to_owned(), vec!["ra".to_owned(), MAIN_FUNCTION.to_owned()]));
+                self.items.push(GeneratedCodeItem::Instruction("lw".to_owned(), vec!["a0".to_owned(), "-4(sp)".to_owned()]));
                 self.items.push(GeneratedCodeItem::Instruction("addi".to_owned(), vec!["a7".to_owned(), "x0".to_owned(), "93".to_owned()]));
                 self.items.push(GeneratedCodeItem::Instruction("ecall".to_owned(), vec![]));
-            },
-            ir::IRItem::Var(label, size) => {
-                self.check_data_section();
-
-                self.items.push(GeneratedCodeItem::Label(format!("{}", label)));
-                self.items.push(GeneratedCodeItem::Instruction(".zero".to_string(), vec![format!("{}", size)]));
             },
             ir::IRItem::Label(label) => {
                 self.check_text_section();
@@ -248,42 +277,66 @@ impl<'ir> CodeGenerator<'ir> {
 
                 self.items.push(GeneratedCodeItem::Label(label.to_owned()));
                 self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["sp".to_owned(), "sp".to_owned(), format!("-{}", offset)]));
-                self.items.push(GeneratedCodeItem::Instruction("sd".to_string(), vec!["ra".to_owned(), format!("{}(sp)", offset - ADDRESS_SIZE)]));
+                self.items.push(GeneratedCodeItem::Instruction("sd".to_string(), vec!["ra".to_owned(), self.get_jump_address()]));
             },
             ir::IRItem::Return() => {
                 let f = self.current_function.unwrap();
 
                 let offset = self.function_stack_offset_map.get(&f.name).unwrap().0;
 
-                self.items.push(GeneratedCodeItem::Instruction("ld".to_string(), vec!["ra".to_owned(), format!("{}(sp)", offset - ADDRESS_SIZE)]));
-                self.items.push(GeneratedCodeItem::Instruction("ld".to_string(), vec!["a0".to_owned(), self.to_asm_repr(&f.stack_list.get(0).unwrap().0)]));
+                self.items.push(GeneratedCodeItem::Instruction("ld".to_string(), vec!["ra".to_owned(), self.get_jump_address()]));
+                self.items.push(GeneratedCodeItem::Instruction("ld".to_string(), vec!["a0".to_owned(), self.get_return_address()]));
 
                 self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["sp".to_owned(), "sp".to_owned(), format!("{}", offset)]));
                 self.items.push(GeneratedCodeItem::Instruction("ret".to_string(), vec![]));
             },
             ir::IRItem::Move(s1, s2) => {
-                match s2 {
-                    ir::ValueStorage::Local(_) => {
-                        self.items.push(GeneratedCodeItem::Instruction("move".to_string(), vec![self.to_asm_repr(s1), self.to_asm_repr(s2)]));
-                    },
-                    _ => {
-                        self.items.push(GeneratedCodeItem::Instruction("la".to_string(), vec!["s1".to_owned(), format!("{}", s2)]));
-                        self.items.push(GeneratedCodeItem::Instruction("sw".to_string(), vec!["s1".to_string(), self.to_asm_repr(s1)]));
-                    }
-                }
+                self.load_value_storage_to_register(ir_context, s2, "t0");
+                self.store_register_to_value_storage(ir_context, s1, "t0");
             },
             ir::IRItem::Print(s) => {
                 let f = self.current_function.unwrap();
 
-                let value_type = fetch_variable_type(ir_context, f, s);
+                let variable_type = fetch_variable_type(ir_context, f, s);
 
-                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a0".to_owned(), "x0".to_owned(), "1".to_owned()]));
+                match variable_type {
+                    ast::VariableType::String(_) => {
+                        self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a0".to_owned(), "x0".to_owned(), "1".to_owned()]));
 
-                self.load_value_storage(ir_context,s, "a1");
+                        self.load_value_storage_to_register(ir_context, s, "a1");
 
-                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a2".to_owned(), "x0".to_owned(), format!("{}", value_type.size())]));
-                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a7".to_owned(), "x0".to_owned(), "64".to_owned()]));
-                self.items.push(GeneratedCodeItem::Instruction("ecall".to_owned(), vec![]));
+                        self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a2".to_owned(), "x0".to_owned(), format!("{}", variable_type.size())]));
+                        self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a7".to_owned(), "x0".to_owned(), "64".to_owned()]));
+                        self.items.push(GeneratedCodeItem::Instruction("ecall".to_owned(), vec![]));
+                    },
+                    _ => {},
+                }
+            },
+            ir::IRItem::Jump(label) => {
+                self.items.push(GeneratedCodeItem::Instruction("j".to_string(), vec![format!("{}", label)]));
+            },
+            ir::IRItem::Bz(label, s) => {
+                self.load_value_storage_to_register(ir_context, s, "t0");
+                self.items.push(GeneratedCodeItem::Instruction("sext.w".to_string(), vec!["t0".to_owned(), "t0".to_owned()]));
+                self.items.push(GeneratedCodeItem::Instruction("beqz".to_string(), vec!["t0".to_owned(), format!("{}", label)]));
+            },
+            ir::IRItem::BinaryOp(storage, op, operand1, operand2) => {
+                self.load_value_storage_to_register(ir_context, operand1, "t1");
+                self.load_value_storage_to_register(ir_context, operand2, "t2");
+
+                let mut instruction_option = None;
+
+                match op {
+                    ir::Op::Add => instruction_option = Some("add"),
+                    ir::Op::Sub => instruction_option = Some("sub"),
+                    _ => {},
+                }
+
+                if let Some(instruction) = instruction_option {
+                    self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec!["t0".to_owned(), "t1".to_owned(), "t2".to_owned()]))
+                }
+
+                self.store_register_to_value_storage(ir_context, storage, "t0");
             },
             _ => {},
         }

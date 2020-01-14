@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::error::Error;
 
-use crate::ast;
+use crate::{ast, MAIN_FUNCTION};
 use colored::Colorize;
 
 #[derive(Debug)]
@@ -22,7 +22,9 @@ pub enum SymbolTableError<'input> {
     },
     WrongNumberOfArguments {
         name: &'input str,
-    }
+    },
+    MainFunctionDoesNotExists,
+    MainFunctionReturnTypeMustBeInt,
 }
 
 impl<'input> Error for SymbolTableError<'input> {}
@@ -47,6 +49,12 @@ impl<'input> fmt::Display for SymbolTableError<'input> {
             },
             SymbolTableError::WrongNumberOfArguments { name} => {
                 write!(f, "Wrong number of arguments when calling function `{}`", name.purple())
+            },
+            SymbolTableError::MainFunctionDoesNotExists => {
+                write!(f, "Main function does not exists")
+            },
+            SymbolTableError::MainFunctionReturnTypeMustBeInt => {
+                write!(f, "Main function return type must be int")
             }
         }
     }
@@ -427,7 +435,14 @@ impl<'input> SymbolTable<'input> {
             }
         }
 
-        // dbg!(&self.self);
+        if let Some(main_function) = &functions.get(MAIN_FUNCTION) {
+            if !main_function.return_type.eq(&ast::VariableType::Int) {
+                return Err(SymbolTableError::MainFunctionReturnTypeMustBeInt);
+            }
+        }
+        else {
+            return Err(SymbolTableError::MainFunctionDoesNotExists);
+        }
 
         symbol_table.strings.insert(" "); // used in comma separated print
         symbol_table.ints.insert(1);
