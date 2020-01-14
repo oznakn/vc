@@ -1,5 +1,5 @@
 use crate::ir;
-use std::fmt;
+use std::cmp::max;
 
 #[derive(Clone, Debug)]
 pub enum GeneratedCodeItem {
@@ -8,74 +8,119 @@ pub enum GeneratedCodeItem {
     Instruction(String, Vec<String>),
 }
 
-#[derive(Clone, Debug)]
-pub struct GeneratedCode {
-    pub items: Vec<GeneratedCodeItem>,
-    is_data_section_started: bool,
-}
-
-impl GeneratedCode {
-    fn new() -> Self {
-        return GeneratedCode {
-            items: Vec::new(),
-            is_data_section_started: false,
-        }
-    }
-
-    fn visit(&mut self, ir_item: &ir::IRItem) {
-        match ir_item {
-            ir::IRItem::VarString(label, s) => {
-                if !self.is_data_section_started {
-                    self.items.push(GeneratedCodeItem::Section(".data".to_string()));
-                    self.is_data_section_started = true;
-                }
-
-                self.items.push(GeneratedCodeItem::Label(ir::format_variable_label(label)));
-                self.items.push(GeneratedCodeItem::Instruction(".asciz".to_string(), vec![format!("\"{}\"", s)]));
-            },
-            _ => {},
-        }
-    }
-
-    pub fn from(ir_context: ir::IRContext) -> Self {
-        let mut generated_code = Self::new();
-
-        for ir_item in &ir_context.items {
-            generated_code.visit(ir_item);
-        }
-
-        return generated_code;
-    }
-}
-
-impl fmt::Display for GeneratedCodeItem {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl GeneratedCodeItem {
+    fn to_string(&self, n: usize) -> String {
         return match self {
             GeneratedCodeItem::Section(s) =>
-                write!(f, "{}", s),
+                format!("{}", s),
             GeneratedCodeItem::Label(s) =>
-                write!(f, "{}:", s),
+                format!("{}:", s),
             GeneratedCodeItem::Instruction(s, v) =>
-                write!(
-                    f,
-                    "{}{} {}",
+                format!(
+                    "{}{}{}{}",
                     " ".repeat(4),
                     s,
-                    v.join(" "),
+                    " ".repeat(max(0, n - s.len())),
+                    v.join(", "),
                 ),
         }
     }
 }
 
-impl fmt::Display for GeneratedCode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.items.iter()
-                .map(|i| format!("{}", i))
-                .collect::<Vec<String>>()
-                .join("\n")
-        )
+pub fn convert_to_string(items: &Vec<GeneratedCodeItem>) -> String {
+    let mut max_size: usize = 0;
+    let mut result = "".to_string();
+
+    for item in items {
+        match item {
+            GeneratedCodeItem::Instruction(s, _) => {
+                if s.len() > max_size {
+                    max_size = s.len();
+                }
+            },
+            _ => {},
+        }
+    }
+
+    max_size += 5;
+
+    for item in items {
+        result += &item.to_string(max_size);
+        result += "\n";
+    }
+
+    return result;
+}
+
+#[derive(Clone, Debug)]
+pub struct CodeGenerator<'ir> {
+    is_data_section_started: bool,
+    is_text_section_started: bool,
+    current_function: Option<&'ir ir::Function>,
+}
+
+impl<'ir> CodeGenerator<'ir> {
+    pub fn new() -> Self {
+        return CodeGenerator {
+            is_data_section_started: false,
+            is_text_section_started: false,
+            current_function: None,
+        }
+    }
+
+    fn check_data_section(&mut self, items: &mut Vec<GeneratedCodeItem>) {
+        if !self.is_data_section_started {
+            items.push(GeneratedCodeItem::Section("\n.data".to_string()));
+            self.is_data_section_started = true;
+        }
+    }
+
+    fn check_text_section(&mut self, items: &mut Vec<GeneratedCodeItem>) {
+        if !self.is_text_section_started {
+            items.push(GeneratedCodeItem::Section("\n.text".to_string()));
+            self.is_text_section_started = true;
+        }
+    }
+
+    fn visit(&mut self, items: &mut Vec<GeneratedCodeItem>, ir_item: &'ir ir::IRItem) {
+        match ir_item {
+            ir::IRItem::Var(label, size) => {
+                self.check_data_section(items);
+
+                items.push(GeneratedCodeItem::Label(ir::format_variable_label(label)));
+                items.push(GeneratedCodeItem::Instruction(".zero".to_string(), vec![format!("{}", size)]));
+            },
+            ir::IRItem::VarString(label, s) => {
+                self.check_data_section(items);
+
+                items.push(GeneratedCodeItem::Label(ir::format_variable_label(label)));
+                items.push(GeneratedCodeItem::Instruction(".string".to_string(), vec![format!("\"{}\"", s)])); // .ascii .asciz
+            },
+            ir::IRItem::Label(label) => {
+                self.check_text_section(items);
+
+                items.push(GeneratedCodeItem::Label(label.to_owned()));
+            },
+            ir::IRItem::Function(label, f) =>  {
+                self.check_text_section(items);
+
+                self.current_function = Some(f);
+
+                items.push(GeneratedCodeItem::Label(label.to_owned()));
+            },
+            _ => {},
+        }
+    }
+
+    pub fn build(&mut self, ir_context: &'ir ir::IRContext) -> Vec<GeneratedCodeItem> {
+        let mut items = Vec::new();
+
+        items.push(GeneratedCodeItem::Section(format!(".global {}", ir::START_LABEL)));
+
+        for ir_item in &ir_context.items {
+            self.visit(&mut items, ir_item);
+        }
+
+        return items;
     }
 }

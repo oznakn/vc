@@ -45,11 +45,11 @@ fn compile_command(input_file: &str) -> Result<(), CliError>{
 
     let ir_context = ir::Builder::build(&program, &table);
 
-    let generated_code = codegen::GeneratedCode::from(ir_context);
+    let generated_code = codegen::CodeGenerator::new().build(&ir_context);
 
     let output_file = format!("{}.s", Path::new(&input_file).file_stem().unwrap().to_str().unwrap());
 
-    fs::write(Path::new(&output_file), format!("{}\n", generated_code))
+    fs::write(Path::new(&output_file), codegen::convert_to_string(&generated_code))
         .map_err(|err| CliError {
             error: format!("{}", err),
         })?;

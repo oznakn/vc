@@ -1,8 +1,11 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashSet, HashMap, VecDeque};
 use std::fmt;
 
 use crate::ast;
 use crate::symbol_table;
+
+pub const START_LABEL: &str = "__start__";
+pub const MAIN_FUNCTION: &str = "main";
 
 pub type VariableLabel = i64;
 pub type Label = String;
@@ -158,6 +161,7 @@ pub struct IRContext {
     var_map: HashMap<VariableLabel, ast::VariableType>,
     variable_label_map: HashMap<String, VariableLabel>,
     string_map: HashMap<String, (VariableLabel, u64)>,
+    function_stack_offset_map: HashMap<String, HashMap<VariableLabel, u64>>,
 }
 
 impl IRContext {
@@ -167,6 +171,7 @@ impl IRContext {
             var_map: HashMap::new(),
             variable_label_map: HashMap::new(),
             string_map: HashMap::new(),
+            function_stack_offset_map: HashMap::new(),
         }
     }
 }
@@ -698,6 +703,41 @@ impl<'input> Builder {
         }
     }
 
+    pub fn initialize_stack(&mut self, ir_context: &mut IRContext) {
+        let mut current_function = None;
+        let mut local_queue = VecDeque::new();
+
+        let mut function_map = HashMap::new();
+        let mut stack_offset_map = HashMap::new();
+
+        for item in &ir_context.items {
+            match item {
+                IRItem::Function(_, f) =>  {
+                    current_function = Some(f);
+                },
+                IRItem::Local(l, s) => {
+                    local_queue.push_back((l, s));
+                },
+                IRItem::Return() => {
+                    let mut offset: u64 = 0;
+
+                    while let Some((l, s)) = local_queue.pop_back() {
+                        stack_offset_map.insert(*l, offset);
+                        offset += *s;
+                    }
+
+                    if let Some(f) = current_function {
+                        function_map.insert(f.name.to_owned(), stack_offset_map);
+                    }
+                    stack_offset_map = HashMap::new();
+                },
+                _ => {},
+            }
+        }
+
+        ir_context.function_stack_offset_map = function_map;
+    }
+
     pub fn build(ast_program: &'input ast::Program<'input>, symbol_table: &'input symbol_table::SymbolTable<'input>) -> IRContext {
         let mut builder = Builder::new();
         let mut ir_context = IRContext::new();
@@ -709,14 +749,14 @@ impl<'input> Builder {
             ir_context.string_map.insert((*s).to_owned(), (label, s.len() as u64));
         }
 
-        let start_label = builder.generate_label("__start__", 0);
-        builder.put_label(&mut ir_context, start_label);
-
         for ast_declaration in &ast_program.declaration_list {
             builder.build_declaration(&mut ir_context, &ast_declaration);
         }
 
-        builder.put_jump(&mut ir_context, String::from("main"));
+        let start_label = builder.generate_label(START_LABEL, 0);
+        builder.put_label(&mut ir_context, start_label);
+
+        builder.put_jump(&mut ir_context, MAIN_FUNCTION.to_string());
 
         for ast_function in &ast_program.function_list {
             let call_argument_list = symbol_table.function_call_argument_map.get(ast_function.name).unwrap();
@@ -725,10 +765,12 @@ impl<'input> Builder {
                 for arguments in call_argument_list {
                     builder.build_function(&mut ir_context, symbol_table, ast_function, arguments);
                 }
-            } else if ast_function.name.eq("main") {
+            } else if ast_function.name.eq(MAIN_FUNCTION) {
                 builder.build_function(&mut ir_context, symbol_table, ast_function, &Vec::new());
             }
         }
+
+        builder.initialize_stack(&mut ir_context);
 
         // For debugging purposes
         /* for item in &ir_context.items {
