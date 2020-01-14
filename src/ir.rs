@@ -100,11 +100,11 @@ impl fmt::Display for IRItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             IRItem::ConstString(label, s ) =>
-                write!(f, "const({}, \"{}\")", label, s),
+                write!(f, "const_string({}, \"{}\")", label, s),
             IRItem::ConstInt(label, v ) =>
-                write!(f, "const({}, {})", label, v),
+                write!(f, "const_int({}, {})", label, v),
             IRItem::ConstReal(label, v ) =>
-                write!(f, "const({}, {})", label, v),
+                write!(f, "const_real({}, {})", label, v),
             IRItem::Start() =>
                 write!(f, "start()"),
             IRItem::Label(label) =>
@@ -308,7 +308,7 @@ impl<'input> Builder {
             index = function.stack_list.len();
         }
 
-        let value_storage = ValueStorage::Const(index as u64);
+        let value_storage = ValueStorage::Local(index as u64);
 
         if !index_found {
             function.stack_list.push((value_storage.to_owned(), variable_type.to_owned(), false));
@@ -472,7 +472,7 @@ impl<'input> Builder {
             let parameter_label = self.generate_local(&mut function, &parameter.variable_type);
             self.put_param(ir_context, parameter_label.to_owned(), &parameter.variable_type);
 
-            function.variable_label_map.insert(String::from(parameter.name), parameter_label);
+            function.variable_label_map.insert(parameter.name.to_string(), parameter_label);
         }
 
         for declaration in &ast_function.declaration_list {
@@ -587,9 +587,9 @@ impl<'input> Builder {
 
                 self.put_label(ir_context, start_label.clone());
 
-                let expression_label = self.build_expression(ir_context, symbol_table, function, expression);
+                let expression_value = self.build_expression(ir_context, symbol_table, function, expression);
 
-                self.put_bz(ir_context, continue_label.clone(), expression_label);
+                self.put_bz(ir_context, continue_label.clone(), expression_value);
 
                 for statement in body {
                     self.build_statement(ir_context, symbol_table, function, statement);
@@ -597,8 +597,51 @@ impl<'input> Builder {
                 self.put_jump(ir_context, start_label);
                 self.put_label(ir_context, continue_label);
             },
-            ast::Statement::ForStatement { .. } => {
-                // TODO
+            ast::Statement::ForStatement { init_variable, start_expression, to_expression, by_expression, body } => {
+                let start_label = self.generate_label(&function.name, 0);
+                let continue_label = self.generate_label(&function.name, 0);
+
+                let init_variable_context = self.fetch_variable(ir_context, function, init_variable.name).unwrap();
+
+                let start_expression_value = self.build_expression(ir_context, symbol_table, function, start_expression);
+
+                self.put_move(ir_context, init_variable_context.0.to_owned(), start_expression_value.clone());
+
+                let to_expression_value = self.build_expression(ir_context, symbol_table, function, to_expression);
+                let by_expression_value;
+
+                match by_expression {
+                    ast::Expression::Empty => {
+                        match init_variable_context.1 {
+                            ast::VariableType::Int => {
+                                by_expression_value = ir_context.int_map.get("1").unwrap().to_owned();
+                            },
+                            ast::VariableType::Real => {
+                                by_expression_value = ir_context.real_map.get("1.0").unwrap().to_owned();
+                            },
+                            _ => unreachable!(),
+                        }
+                    },
+                    _ => {
+                        by_expression_value = self.build_expression(ir_context, symbol_table, function, by_expression);
+                    }
+                }
+
+                let check_variable_value_storage = self.generate_local(function, &init_variable_context.1);
+                self.put_local(ir_context, check_variable_value_storage.clone(), &init_variable_context.1);
+
+                self.put_label(ir_context, start_label.clone());
+
+                self.put_binary_op(ir_context, check_variable_value_storage.clone(), Op::LessEq, init_variable_context.0.to_owned(), to_expression_value);
+                self.put_bz(ir_context, continue_label.clone(), check_variable_value_storage);
+
+                for statement in body {
+                    self.build_statement(ir_context, symbol_table, function, statement);
+                }
+                self.put_binary_op(ir_context,  start_expression_value.clone(), Op::Add,start_expression_value, by_expression_value);
+
+                self.put_jump(ir_context, start_label);
+                self.put_label(ir_context, continue_label);
             },
             ast::Statement::ReturnStatement { expression } => {
                 let variable = self.build_expression(ir_context, symbol_table, function, expression);
@@ -793,7 +836,7 @@ impl<'input> Builder {
         ir_context.function_stack_offset_map = function_map;
     }
 
-    fn initialize_read_only_vars(&mut self, ir_context: &mut IRContext, symbol_table: &'input symbol_table::SymbolTable<'input>) {
+    fn initialize_consts(&mut self, ir_context: &mut IRContext, symbol_table: &'input symbol_table::SymbolTable<'input>) {
         for s in &symbol_table.strings {
             let label = self.generate_const(ir_context);
             self.put_const_string(ir_context, label.to_owned(), (*s).to_owned());
@@ -823,7 +866,7 @@ impl<'input> Builder {
         let mut builder = Builder::new();
         let mut ir_context = IRContext::new();
 
-        builder.initialize_read_only_vars(&mut ir_context, symbol_table);
+        builder.initialize_consts(&mut ir_context, symbol_table);
 
         for ast_declaration in &ast_program.declaration_list {
             builder.build_declaration(&mut ir_context, &ast_declaration);
@@ -846,13 +889,13 @@ impl<'input> Builder {
         builder.initialize_stack(&mut ir_context);
 
         // For debugging purposes
-        /* for item in &ir_context.items {
+        for item in &ir_context.items {
             match item {
                 IRItem::Label(_) => println!("{}", item),
                 IRItem::Function(_, _) => println!("{}", item),
                 _ => println!("    {}", item),
             }
-        } */
+        }
 
         return ir_context;
     }

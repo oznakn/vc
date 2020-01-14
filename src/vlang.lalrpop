@@ -192,14 +192,24 @@ pub Statement: ast::Statement<'input> = {
     "return" <expression:Expression> ";" => ast::Statement::ReturnStatement {
         expression,
     },
-    "for" <variable:Variable> "to" <to_expression:Expression> "by" <by_expression:Expression> <statement_list:StatementList> "endfor" ";" => ast::Statement::ForStatement {
-        init_variable: variable,
+    "for" <name:"identifier"> ":=" <start_expression:Expression> "to" <to_expression:Expression> "by" <by_expression:Expression> <statement_list:StatementList> "endfor" ";" => ast::Statement::ForStatement {
+        init_variable: ast::VariableIdentifier {
+            name,
+            use_index: false,
+            expression: Box::new(ast::Expression::Empty),
+        },
+        start_expression,
         to_expression,
         by_expression,
         body: statement_list,
     },
-    "for" <variable:Variable> "to" <to_expression:Expression> <statement_list:StatementList> "endfor" ";" => ast::Statement::ForStatement {
-        init_variable: variable,
+    "for" <name:"identifier"> ":=" <start_expression:Expression> "to" <to_expression:Expression> <statement_list:StatementList> "endfor" ";" => ast::Statement::ForStatement {
+        init_variable: ast::VariableIdentifier {
+            name,
+            use_index: false,
+            expression: Box::new(ast::Expression::Empty),
+        },
+        start_expression,
         to_expression,
         by_expression: ast::Expression::Empty,
         body: statement_list,

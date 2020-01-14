@@ -163,7 +163,8 @@ pub enum Statement<'input> {
         expression: Expression<'input>,
     },
     ForStatement {
-        init_variable: Variable<'input>,
+        init_variable: VariableIdentifier<'input>,
+        start_expression: Expression<'input>,
         by_expression: Expression<'input>,
         to_expression: Expression<'input>,
         body: Vec<Statement<'input>>,
