@@ -9,6 +9,7 @@ use clap::{Arg, App, SubCommand};
 use crate::parser;
 use crate::symbol_table;
 use crate::ir;
+use crate::codegen;
 
 #[derive(Debug)]
 pub struct CliError {
@@ -43,7 +44,11 @@ fn compile_command(input_file: &str) -> Result<(), CliError>{
             error: format!("{}", err),
         })?;
 
-    let _ir = ir::Builder::build(&program, &table);
+    let ir_context = ir::Builder::build(&program, &table);
+
+    let generated_code = codegen::GeneratedCode::from(ir_context);
+
+    generated_code.print();
 
     return Ok(());
 }

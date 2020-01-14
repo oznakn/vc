@@ -73,6 +73,7 @@ pub struct SymbolTable<'input> {
     pub variables: HashMap<&'input str, &'input ast::VariableType>,
     pub function_call_list: HashSet<&'input str>,
     pub function_call_argument_map: HashMap<&'input str, Vec<Vec<ast::VariableType>>>,
+    pub strings: HashSet<&'input str>,
 }
 
 impl<'input> SymbolTable<'input> {
@@ -82,6 +83,7 @@ impl<'input> SymbolTable<'input> {
             variables: HashMap::new(),
             function_call_list: HashSet::new(),
             function_call_argument_map: HashMap::new(),
+            strings: HashSet::new(),
         };
     }
 
@@ -202,7 +204,9 @@ impl<'input> SymbolTable<'input> {
             ast::Statement::PrintStatement { parameter_list } => {
                 for parameter in parameter_list {
                     match parameter {
-                        ast::Printable::String(_) => {},
+                        ast::Printable::String(s) => {
+                            self.strings.insert(s);
+                        },
                         ast::Printable::Expression(e) => {
                             let expression_type = self.check_expression(functions, function_scope, e)?;
 
@@ -397,6 +401,7 @@ impl<'input> SymbolTable<'input> {
 
         // dbg!(&self.self);
 
+        symbol_table.strings.insert(" "); // used in comma separated print
         symbol_table.functions.extend(functions);
 
         return Ok(symbol_table);

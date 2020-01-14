@@ -9,12 +9,12 @@ pub type Label = String;
 pub type VariablePointer = (VariableLabel, VariableLabel);
 
 #[inline]
-fn format_variable_label(label: &VariableLabel) -> String {
+pub fn format_variable_label(label: &VariableLabel) -> String {
     if *label < 0 {
-        return format!(".v{}", -(*label));
+        return format!("v{}", -(*label));
     }
 
-    return format!(".t{}", label);
+    return format!("t{}", label);
 }
 
 #[derive(Clone, Debug)]
@@ -70,10 +70,10 @@ pub enum IRItem {
     Fetch(VariableLabel, VariablePointer),
     Bz(Label, VariableLabel),
     Var(VariableLabel, u64),
+    VarString(VariableLabel, String),
     Promote(VariableLabel, VariableLabel),
     Op(VariableLabel, Op, VariableLabel, VariableLabel),
     Print(VariableLabel),
-    PrintString(String),
     Read(VariableLabel, u64),
     Call(Label, VariableLabel, Vec<VariableLabel>),
     Return(),
@@ -106,14 +106,14 @@ impl fmt::Display for IRItem {
                 write!(f, "bz({}, {})", label, format_variable_label(variable)),
             IRItem::Var(variable, size) =>
                 write!(f, "var({}, {})", format_variable_label(variable), size),
+            IRItem::VarString(variable, s) =>
+                write!(f, "var({}, \"{}\")", format_variable_label(variable), s),
             IRItem::Promote(to, from) =>
                 write!(f, "promote({}, {})", format_variable_label(to), format_variable_label(from)),
             IRItem::Op(target,op, operand1, operand2) =>
                 write!(f, "op({}, {}, {}, {})", format_variable_label(target), op, format_variable_label(operand1), format_variable_label(operand2)),
             IRItem::Print(label) =>
                 write!(f, "print({})", format_variable_label(label)),
-            IRItem::PrintString(s) =>
-                write!(f, "print(\"{}\")", s),
             IRItem::Read(label, size) =>
                 write!(f, "read({}, {})", format_variable_label(label), size),
             IRItem::Return() =>
@@ -154,9 +154,10 @@ impl<'input> Function {
 
 #[derive(Clone, Debug)]
 pub struct IRContext {
-    items: Vec<IRItem>,
+    pub items: Vec<IRItem>,
     var_map: HashMap<VariableLabel, ast::VariableType>,
     variable_label_map: HashMap<String, VariableLabel>,
+    string_map: HashMap<String, (VariableLabel, u64)>,
 }
 
 impl IRContext {
@@ -165,6 +166,7 @@ impl IRContext {
             items: Vec::new(),
             var_map: HashMap::new(),
             variable_label_map: HashMap::new(),
+            string_map: HashMap::new(),
         }
     }
 }
@@ -221,6 +223,20 @@ impl<'input> Builder {
     #[inline]
     fn put_var(&mut self, ir_context: &mut IRContext, label: VariableLabel, variable_type: &'input ast::VariableType) {
         ir_context.items.push(IRItem::Var(label, variable_type.size()));
+    }
+
+    #[inline]
+    fn generate_var_string(&mut self, _ir_context: &mut IRContext) -> VariableLabel {
+        let index = self.counter;
+
+        self.counter -= 1;
+
+        return index;
+    }
+
+    #[inline]
+    fn put_var_string(&mut self, ir_context: &mut IRContext, label: VariableLabel, s: String) {
+        ir_context.items.push(IRItem::VarString(label, s));
     }
 
     fn generate_local(&mut self, function: &mut Function, variable_type: &'input ast::VariableType) -> VariableLabel {
@@ -290,11 +306,6 @@ impl<'input> Builder {
     #[inline]
     fn put_print(&self, ir_context: &mut IRContext, label: VariableLabel) {
         ir_context.items.push(IRItem::Print(label));
-    }
-
-    #[inline]
-    fn put_print_string(&self, ir_context: &mut IRContext, s: String) {
-        ir_context.items.push(IRItem::PrintString(s));
     }
 
     #[inline]
@@ -442,6 +453,8 @@ impl<'input> Builder {
             ast::Statement::PrintStatement { parameter_list } => {
                 let mut i: usize = 0;
 
+                let space_string_item = ir_context.string_map.get(" ").unwrap().to_owned();
+
                 while i < parameter_list.len() {
                     let parameter = &parameter_list[i];
 
@@ -452,12 +465,14 @@ impl<'input> Builder {
                             self.put_print(ir_context, label);
                         },
                         ast::Printable::String(s) => {
-                            self.put_print_string(ir_context, (*s).to_owned());
+                            let string_item = ir_context.string_map.get(*s).unwrap().to_owned();
+
+                            self.put_print(ir_context, string_item.0);
                         },
                     }
 
                     if i != parameter_list.len() - 1 {
-                        self.put_print_string(ir_context, String::from(" "));
+                        self.put_print(ir_context, space_string_item.0);
                     }
 
                     i += 1;
@@ -687,6 +702,13 @@ impl<'input> Builder {
         let mut builder = Builder::new();
         let mut ir_context = IRContext::new();
 
+        for s in &symbol_table.strings {
+            let label = builder.generate_var_string(&mut ir_context);
+            builder.put_var_string(&mut ir_context, label, (*s).to_owned());
+
+            ir_context.string_map.insert((*s).to_owned(), (label, s.len() as u64));
+        }
+
         let start_label = builder.generate_label("__start__", 0);
         builder.put_label(&mut ir_context, start_label);
 
@@ -709,13 +731,13 @@ impl<'input> Builder {
         }
 
         // For debugging purposes
-        for item in &ir_context.items {
+        /* for item in &ir_context.items {
             match item {
                 IRItem::Label(_) => println!("{}", item),
                 IRItem::Function(_, _) => println!("{}", item),
                 _ => println!("    {}", item),
             }
-        }
+        } */
 
         return ir_context;
     }
