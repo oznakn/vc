@@ -1,7 +1,6 @@
-use std::{
-    fs,
-    fmt,
-};
+use std::fs;
+use std::fmt;
+use std::path::Path;
 use std::error::Error;
 use colored::Colorize;
 use clap::{Arg, App, SubCommand};
@@ -48,7 +47,14 @@ fn compile_command(input_file: &str) -> Result<(), CliError>{
 
     let generated_code = codegen::GeneratedCode::from(ir_context);
 
-    generated_code.print();
+    let output_file = format!("{}.s", Path::new(&input_file).file_stem().unwrap().to_str().unwrap());
+
+    fs::write(Path::new(&output_file), format!("{}\n", generated_code))
+        .map_err(|err| CliError {
+            error: format!("{}", err),
+        })?;
+
+    println!("{}", "Success".green());
 
     return Ok(());
 }

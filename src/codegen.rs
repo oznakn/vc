@@ -1,4 +1,5 @@
 use crate::ir;
+use std::fmt;
 
 #[derive(Clone, Debug)]
 pub enum GeneratedCodeItem {
@@ -36,24 +37,6 @@ impl GeneratedCode {
         }
     }
 
-    pub fn print(&self) {
-        for item in &self.items {
-            match item {
-                GeneratedCodeItem::Section(s) =>
-                    println!("{}", s),
-                GeneratedCodeItem::Label(s) =>
-                    println!("{}{}:", " ".repeat(4) , s),
-                GeneratedCodeItem::Instruction(s, v) =>
-                    println!(
-                        "{}{} {}",
-                        " ".repeat(8),
-                        s,
-                        v.join(" "),
-                    ),
-            }
-        }
-    }
-
     pub fn from(ir_context: ir::IRContext) -> Self {
         let mut generated_code = Self::new();
 
@@ -62,5 +45,37 @@ impl GeneratedCode {
         }
 
         return generated_code;
+    }
+}
+
+impl fmt::Display for GeneratedCodeItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return match self {
+            GeneratedCodeItem::Section(s) =>
+                write!(f, "{}", s),
+            GeneratedCodeItem::Label(s) =>
+                write!(f, "{}:", s),
+            GeneratedCodeItem::Instruction(s, v) =>
+                write!(
+                    f,
+                    "{}{} {}",
+                    " ".repeat(4),
+                    s,
+                    v.join(" "),
+                ),
+        }
+    }
+}
+
+impl fmt::Display for GeneratedCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.items.iter()
+                .map(|i| format!("{}", i))
+                .collect::<Vec<String>>()
+                .join("\n")
+        )
     }
 }
