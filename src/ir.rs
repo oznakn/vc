@@ -4,7 +4,6 @@ use std::fmt;
 use crate::ast;
 use crate::symbol_table;
 
-pub const START_LABEL: &str = "__start__";
 pub const MAIN_FUNCTION: &str = "main";
 
 pub type VariableLabel = i64;
@@ -61,6 +60,7 @@ impl fmt::Display for Op {
 
 #[derive(Clone, Debug)]
 pub enum IRItem {
+    Start(),
     Label(Label),
     Function(Label, Function),
     Param(VariableLabel, u64),
@@ -85,6 +85,8 @@ pub enum IRItem {
 impl fmt::Display for IRItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            IRItem::Start() =>
+                write!(f, "start()"),
             IRItem::Label(label) =>
                 write!(f, "{}:", label),
             IRItem::Function(label, _) =>
@@ -208,6 +210,11 @@ impl<'input> Builder {
         }
 
         return label;
+    }
+
+    #[inline]
+    fn put_start(&mut self, ir_context: &mut IRContext) {
+        ir_context.items.push(IRItem::Start());
     }
 
     #[inline]
@@ -640,7 +647,7 @@ impl<'input> Builder {
                         self.put_op(ir_context, result_local, Op::Mul, operand1, operand2),
                     ast::BinaryOperator::Division =>
                         self.put_op(ir_context, result_local, Op::Div, operand1, operand2),
-                    _ => {},
+                    _ => {}, // TODO: add more operator
                 }
 
                 self.recycle_local(ir_context, function, &operand1);
@@ -753,10 +760,7 @@ impl<'input> Builder {
             builder.build_declaration(&mut ir_context, &ast_declaration);
         }
 
-        let start_label = builder.generate_label(START_LABEL, 0);
-        builder.put_label(&mut ir_context, start_label);
-
-        builder.put_jump(&mut ir_context, MAIN_FUNCTION.to_string());
+        builder.put_start(&mut ir_context);
 
         for ast_function in &ast_program.function_list {
             let call_argument_list = symbol_table.function_call_argument_map.get(ast_function.name).unwrap();

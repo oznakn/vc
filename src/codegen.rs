@@ -1,6 +1,8 @@
 use crate::ir;
 use std::cmp::max;
 
+const START_LABEL: &str = "_start";
+
 #[derive(Clone, Debug)]
 pub enum GeneratedCodeItem {
     Section(String),
@@ -84,6 +86,15 @@ impl<'ir> CodeGenerator<'ir> {
 
     fn visit(&mut self, items: &mut Vec<GeneratedCodeItem>, ir_item: &'ir ir::IRItem) {
         match ir_item {
+            ir::IRItem::Start() => {
+                self.check_text_section(items);
+
+                items.push(GeneratedCodeItem::Label(START_LABEL.to_owned()));
+
+                items.push(GeneratedCodeItem::Instruction("addi".to_owned(), vec!["a0".to_owned(), "x0".to_owned(), "0".to_owned()])); // TODO: change later
+                items.push(GeneratedCodeItem::Instruction("addi".to_owned(), vec!["a7".to_owned(), "x0".to_owned(), "93".to_owned()]));
+                items.push(GeneratedCodeItem::Instruction("ecall".to_owned(), vec![]));
+            },
             ir::IRItem::Var(label, size) => {
                 self.check_data_section(items);
 
@@ -115,7 +126,7 @@ impl<'ir> CodeGenerator<'ir> {
     pub fn build(&mut self, ir_context: &'ir ir::IRContext) -> Vec<GeneratedCodeItem> {
         let mut items = Vec::new();
 
-        items.push(GeneratedCodeItem::Section(format!(".global {}", ir::START_LABEL)));
+        items.push(GeneratedCodeItem::Section(format!(".global {}", START_LABEL)));
 
         for ir_item in &ir_context.items {
             self.visit(&mut items, ir_item);
