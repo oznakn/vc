@@ -80,13 +80,16 @@ pub ParameterList = Comma<Parameter>;
 pub ExpressionList = Comma<Expression>;
 
 pub LExpression: ast::Expression<'input> = {
-    <e1:LExpressionTerm> <operator:LogOp> <e2:LExpression> => ast::Expression::BinaryExpression {
+    <e1:LExpressionTerm> <operator:BinaryLogOp> <e2:LExpression> => ast::Expression::BinaryExpression {
         left_expression: Box::new(e1),
         operator,
         right_expression: Box::new(e2),
     },
+    <operator:UnaryLogOp> <e:LExpression> => ast::Expression::UnaryExpression {
+        expression: Box::new(e),
+        operator,
+    },
     LExpressionTerm,
-    // LogOp LExpression,
 };
 
 LExpressionTerm: ast::Expression<'input> = {
@@ -109,9 +112,14 @@ RelOp: ast::BinaryOperator = {
 };
 
 #[inline]
-LogOp: ast::BinaryOperator = {
+BinaryLogOp: ast::BinaryOperator = {
     "and" => ast::BinaryOperator::And,
     "or" => ast::BinaryOperator::Or,
+};
+
+#[inline]
+UnaryLogOp: ast::UnaryOperator = {
+    "not" => ast::UnaryOperator::Not,
 };
 
 pub Expression: ast::Expression<'input> = {
@@ -143,7 +151,7 @@ MulOp: ast::BinaryOperator = {
     "*" => ast::BinaryOperator::Multiplication,
     "/" => ast::BinaryOperator::Division,
     "mod" => ast::BinaryOperator::Mod,
-    "div" => ast::BinaryOperator::Div,
+    "div" => ast::BinaryOperator::IntDivision,
 };
 
 Factor: ast::Expression<'input> = {
@@ -168,7 +176,6 @@ UnaryExpression: ast::Expression<'input> = {
 #[inline]
 UnOp: ast::UnaryOperator = {
     "-" => ast::UnaryOperator::Negative,
-    "not" => ast::UnaryOperator::Not,
 };
 
 pub ArgumentList = ExpressionList;

@@ -322,7 +322,7 @@ impl<'input> SymbolTable<'input> {
                 let operand1_type = self.check_expression(functions, function_scope, left_expression)?;
                 let operand2_type = self.check_expression(functions, function_scope, right_expression)?;
 
-                if *operator == ast::BinaryOperator::Div && (operand1_type != ast::VariableType::Int || operand2_type != ast::VariableType::Int) {
+                if *operator == ast::BinaryOperator::IntDivision && (operand1_type != ast::VariableType::Int || operand2_type != ast::VariableType::Int) {
                     // TODO: div applies to int-valued operands only
                 }
 
@@ -413,7 +413,6 @@ impl<'input> SymbolTable<'input> {
         // dbg!(&self.self);
 
         symbol_table.strings.insert(" "); // used in comma separated print
-        symbol_table.ints.insert(-1); // used in unary minus operator
         symbol_table.functions.extend(functions);
 
         return Ok(symbol_table);

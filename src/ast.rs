@@ -13,7 +13,7 @@ pub enum BinaryOperator {
     Multiplication,
     Division,
     Mod,
-    Div,
+    IntDivision,
     Equal,
     NotEqual,
     Less,

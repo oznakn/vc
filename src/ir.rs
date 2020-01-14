@@ -44,6 +44,8 @@ pub enum Op {
     GreaterEq,
     And,
     Or,
+    Not,
+    Neg,
 }
 
 impl fmt::Display for Op {
@@ -63,6 +65,8 @@ impl fmt::Display for Op {
             Op::GreaterEq => write!(f, ">="),
             Op::And => write!(f, "and"),
             Op::Or => write!(f, "or"),
+            Op::Not => write!(f, "not"),
+            Op::Neg => write!(f, "-"),
         }
     }
 }
@@ -84,7 +88,8 @@ pub enum IRItem {
     Bz(Label, ValueStorage),
     Var(ValueStorage, u64),
     Promote(ValueStorage, ValueStorage),
-    Op(ValueStorage, Op, ValueStorage, ValueStorage),
+    BinaryOp(ValueStorage, Op, ValueStorage, ValueStorage),
+    UnaryOp(ValueStorage, Op, ValueStorage),
     Print(ValueStorage),
     Read(ValueStorage, u64),
     Call(Label, ValueStorage, Vec<ValueStorage>),
@@ -124,8 +129,10 @@ impl fmt::Display for IRItem {
                 write!(f, "var({}, {})", variable, size),
             IRItem::Promote(to, from) =>
                 write!(f, "promote({}, {})", to, from),
-            IRItem::Op(target,op, operand1, operand2) =>
-                write!(f, "op({}, {}, {}, {})", target, op, operand1, operand2),
+            IRItem::BinaryOp(target, op, operand1, operand2) =>
+                write!(f, "binary_op({}, {}, {}, {})", target, op, operand1, operand2),
+            IRItem::UnaryOp(target, op, operand) =>
+                write!(f, "unary_op({}, {}, {})", target, op, operand),
             IRItem::Print(label) =>
                 write!(f, "print({})", label),
             IRItem::Read(label, size) =>
@@ -373,8 +380,13 @@ impl<'input> Builder {
     }
 
     #[inline]
-    fn put_op(&self, ir_context: &mut IRContext, target: ValueStorage, op: Op, operand1: ValueStorage, operand2: ValueStorage) {
-        ir_context.items.push(IRItem::Op(target, op, operand1, operand2));
+    fn put_binary_op(&self, ir_context: &mut IRContext, target: ValueStorage, op: Op, operand1: ValueStorage, operand2: ValueStorage) {
+        ir_context.items.push(IRItem::BinaryOp(target, op, operand1, operand2));
+    }
+
+    #[inline]
+    fn put_unary_op(&self, ir_context: &mut IRContext, target: ValueStorage, op: Op, operand: ValueStorage) {
+        ir_context.items.push(IRItem::UnaryOp(target, op, operand));
     }
 
     #[inline]
@@ -681,34 +693,44 @@ impl<'input> Builder {
                 let result_local = self.generate_local(function, &operand1_type);
                 self.put_local(ir_context, result_local.to_owned(), &operand1_type);
 
-                match operator {
-                    ast::BinaryOperator::Addition =>
-                        self.put_op(ir_context, result_local.to_owned(), Op::Add, operand1.to_owned(), operand2.to_owned()),
-                    ast::BinaryOperator::Subtraction =>
-                        self.put_op(ir_context, result_local.to_owned(), Op::Sub, operand1.to_owned(), operand2.to_owned()),
-                    ast::BinaryOperator::Multiplication =>
-                        self.put_op(ir_context, result_local.to_owned(), Op::Mul, operand1.to_owned(), operand2.to_owned()),
-                    ast::BinaryOperator::Division =>
-                        self.put_op(ir_context, result_local.to_owned(), Op::Div, operand1.to_owned(), operand2.to_owned()),
-                    _ => {}, // TODO: add more operator
-                }
+                let op = match operator {
+                    ast::BinaryOperator::Addition => Op::Add,
+                    ast::BinaryOperator::Subtraction => Op::Sub,
+                    ast::BinaryOperator::Multiplication => Op::Mul,
+                    ast::BinaryOperator::Division => Op::Div,
+                    ast::BinaryOperator::Mod => Op::Mod,
+                    ast::BinaryOperator::IntDivision => Op::IntDiv,
+                    ast::BinaryOperator::Equal => Op::Eq,
+                    ast::BinaryOperator::NotEqual => Op::NotEq,
+                    ast::BinaryOperator::Less => Op::Less,
+                    ast::BinaryOperator::LessEqual => Op::LessEq,
+                    ast::BinaryOperator::Greater => Op::Greater,
+                    ast::BinaryOperator::GreaterEqual => Op::GreaterEq,
+                    ast::BinaryOperator::And => Op::And,
+                    ast::BinaryOperator::Or => Op::Or,
+                };
+
+                self.put_binary_op(ir_context, result_local.to_owned(), op, operand1.to_owned(), operand2.to_owned());
 
                 self.recycle_local(ir_context, function, &operand1);
                 self.recycle_local(ir_context, function, &operand2);
 
                 return result_local;
             },
-            ast::Expression::UnaryExpression { expression, operator: _} => {
+            ast::Expression::UnaryExpression { expression, operator } => {
                 let operand = self.build_expression(ir_context, symbol_table, function, expression);
 
                 let variable_type = self.fetch_value_type(ir_context, function, &operand);
 
-                let negate_operand= ir_context.int_map.get("-1").unwrap().to_owned();
-
                 let result_local = self.generate_local(function, &variable_type);
                 self.put_local(ir_context, result_local.to_owned(), &variable_type);
 
-                self.put_op(ir_context, result_local.to_owned(), Op::Mul, negate_operand, operand.to_owned());
+                let op = match operator {
+                    ast::UnaryOperator::Negative => Op::Neg,
+                    ast::UnaryOperator::Not => Op::Not,
+                };
+
+                self.put_unary_op(ir_context, result_local.to_owned(), op, operand.to_owned());
 
                 self.recycle_local(ir_context, function, &operand);
 
