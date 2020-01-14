@@ -176,24 +176,30 @@ impl<'ir> CodeGenerator<'ir> {
         }
     }
 
-    fn load_value_storage_to_register(&mut self, ir_context: &'ir ir::IRContext, storage: &'ir ir::ValueStorage, register: &str) {
+    fn load_value_storage_address_to_register(&mut self, ir_context: &'ir ir::IRContext, storage: &'ir ir::ValueStorage, register: &str) {
         let variable_type = fetch_variable_type(ir_context, self.current_function.unwrap(), storage);
 
         let mut instruction_option = None;
 
         match variable_type {
             ast::VariableType::String(_) => instruction_option = Some("la"),
-            _ =>
-                match storage {
-                    ir::ValueStorage::Local(_) => {
-                        if variable_type.size() == FULL_WIDTH_SIZE {
-                            instruction_option = Some("ld");
-                        } else if variable_type.size() == FULL_WIDTH_SIZE / 2 {
-                            instruction_option = Some("lw");
-                        }
-                    },
-                    _ => instruction_option = Some("la"),
-                }
+            _ => {},
+        }
+
+        if let Some(instruction) = instruction_option {
+            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec![register.to_string(), self.value_storage_to_string(storage)]));
+        }
+    }
+
+    fn load_value_storage_to_register(&mut self, ir_context: &'ir ir::IRContext, storage: &'ir ir::ValueStorage, register: &str) {
+        let variable_type = fetch_variable_type(ir_context, self.current_function.unwrap(), storage);
+
+        let mut instruction_option = None;
+
+        match variable_type {
+            ast::VariableType::Int => instruction_option = Some("lw"),
+            ast::VariableType::Real => instruction_option = Some("ld"),
+            _ => {},
         }
 
         if let Some(instruction) = instruction_option {
@@ -207,19 +213,9 @@ impl<'ir> CodeGenerator<'ir> {
         let mut instruction_option = None;
 
         match variable_type {
-            ast::VariableType::String(_) => {},
-            _ =>
-                match storage {
-                    ir::ValueStorage::Local(_) => {
-                        if variable_type.size() == FULL_WIDTH_SIZE {
-                            instruction_option = Some("sd");
-                        } else if variable_type.size() == FULL_WIDTH_SIZE / 2 {
-                            instruction_option = Some("sw");
-                        }
-                    },
-                    ir::ValueStorage::Var(_) => instruction_option = Some("la"),
-                    _ => {},
-                }
+            ast::VariableType::Int => instruction_option = Some("sw"),
+            ast::VariableType::Real => instruction_option = Some("sd"),
+            _ => {},
         }
 
         if let Some(instruction) = instruction_option {
@@ -303,7 +299,7 @@ impl<'ir> CodeGenerator<'ir> {
                     ast::VariableType::String(_) => {
                         self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a0".to_owned(), "x0".to_owned(), "1".to_owned()]));
 
-                        self.load_value_storage_to_register(ir_context, s, "a1");
+                        self.load_value_storage_address_to_register(ir_context, s, "a1");
 
                         self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a2".to_owned(), "x0".to_owned(), format!("{}", variable_type.size())]));
                         self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a7".to_owned(), "x0".to_owned(), "64".to_owned()]));
