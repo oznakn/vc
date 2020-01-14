@@ -45,7 +45,7 @@ fn compile_command(input_file: &str) -> Result<(), CliError>{
 
     let ir_context = ir::Builder::build(&program, &table);
 
-    let generated_code = codegen::CodeGenerator::new().build(&ir_context);
+    let generated_code = codegen::CodeGenerator::build(&ir_context);
 
     let output_file = format!("{}.s", Path::new(&input_file).file_stem().unwrap().to_str().unwrap());
 

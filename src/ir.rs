@@ -3,9 +3,7 @@ use std::fmt;
 
 use crate::ast;
 use crate::symbol_table;
-
-pub const MAIN_FUNCTION: &str = "main";
-pub const ADDRESS_SIZE: u64 = 8; // for 64-bit computer, return address, FEATURE
+use crate::MAIN_FUNCTION;
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum ValueStorage {
@@ -14,12 +12,13 @@ pub enum ValueStorage {
     Local(u64),
 }
 
+// Use only developmental purposes
 impl fmt::Display for ValueStorage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ValueStorage::Local(i) => write!(f, "_l_{}", i),
-            ValueStorage::Var(i) => write!(f, "_v_{}", i),
-            ValueStorage::Const(i) => write!(f, "_c_{}", i),
+            ValueStorage::Const(i) => write!(f, ".c{}", i),
+            ValueStorage::Var(i) => write!(f, ".v{}", i),
+            ValueStorage::Local(i) => write!(f, ".l{}", i),
         }
     }
 }
@@ -155,8 +154,8 @@ impl fmt::Display for IRItem {
 pub struct Function {
     pub name: String,
     pub return_type: ast::VariableType,
-    pub stack_list: Vec<(ValueStorage, ast::VariableType, bool)>, // is_temp
-    pub stack_map: HashMap<ValueStorage, (ast::VariableType, bool)>, // is_temp
+    pub stack_list: Vec<(ValueStorage, ast::VariableType)>,
+    pub stack_map: HashMap<ValueStorage, ast::VariableType>,
     variable_label_map: HashMap<String, ValueStorage>,
 }
 
@@ -197,10 +196,10 @@ impl IRContext {
     }
 }
 
-pub fn fetch_value_type(ir_context: &IRContext, function: &Function, value_storage: &ValueStorage) -> ast::VariableType {
+pub fn fetch_variable_type(ir_context: &IRContext, function: &Function, value_storage: &ValueStorage) -> ast::VariableType {
     return match value_storage {
         ValueStorage::Local(_) => {
-            function.stack_map.get(value_storage).unwrap().0.to_owned()
+            function.stack_map.get(value_storage).unwrap().to_owned()
         },
         ValueStorage::Var(_) => {
             ir_context.var_map.get(value_storage).unwrap().to_owned()
@@ -216,14 +215,12 @@ pub struct Builder {
     labels: HashSet<String>,
     const_counter: u64,
     var_counter: u64,
-    stack_recycle_list: Vec<usize>,
 }
 
 impl<'input> Builder {
     fn new() -> Self {
         return Builder {
             labels: HashSet::new(),
-            stack_recycle_list: Vec::new(),
             const_counter: 0,
             var_counter: 0,
         };
@@ -299,32 +296,12 @@ impl<'input> Builder {
     }
 
     fn generate_local(&mut self, function: &mut Function, variable_type: &'input ast::VariableType) -> ValueStorage {
-        let mut index: usize = 0;
-        let mut index_found = false;
+        let index = function.stack_list.len() as u64;
 
-        let mut i = 0;
-        while i < self.stack_recycle_list.len() {
-            if function.stack_list[self.stack_recycle_list[i]].1 == *variable_type {
-                index = self.stack_recycle_list[i];
-                self.stack_recycle_list.remove(i);
+        let value_storage = ValueStorage::Local(index);
 
-                index_found = true;
-                break;
-            }
-
-            i += 1;
-        }
-
-        if !index_found {
-            index = function.stack_list.len();
-        }
-
-        let value_storage = ValueStorage::Local(index as u64);
-
-        if !index_found {
-            function.stack_list.push((value_storage.to_owned(), variable_type.to_owned(), false));
-            function.stack_map.insert(value_storage.to_owned(), (variable_type.to_owned(), false));
-        }
+        function.stack_list.push((value_storage.to_owned(), variable_type.to_owned()));
+        function.stack_map.insert(value_storage.to_owned(), variable_type.to_owned());
 
         return value_storage;
     }
@@ -332,18 +309,6 @@ impl<'input> Builder {
     #[inline]
     fn put_local(&self, ir_context: &mut IRContext, label: ValueStorage, variable_type: &'input ast::VariableType) {
         ir_context.items.push(IRItem::Local(label, variable_type.size()))
-    }
-
-    #[allow(unused_variables)]
-    fn recycle_local(&mut self, _ir_context: &mut IRContext, function: &Function, label: &ValueStorage) {
-        /* match label {
-            ValueStorage::Temp(i) => {
-                if function.stack_map.get(label).unwrap().1 {
-                    self.stack_recycle_list.push((*i) as usize);
-                }
-            },
-            _ => {}
-        } */
     }
 
     #[inline]
@@ -448,12 +413,10 @@ impl<'input> Builder {
     }
 
     fn fetch_value_type(&mut self, ir_context: &mut IRContext, function: &mut Function, value_storage: &ValueStorage) -> ast::VariableType {
-        return fetch_value_type(ir_context, function, value_storage);
+        return fetch_variable_type(ir_context, function, value_storage);
     }
 
     fn build_function(&mut self, ir_context: &mut IRContext, symbol_table: &'input symbol_table::SymbolTable<'input>, ast_function: &'input ast::Function, arguments: &Vec<ast::VariableType>) {
-        self.stack_recycle_list.clear();
-
         let label_string = self.generate_function_label_from_signature(symbol_table, ast_function.name, arguments);
 
         let mut function = Function::new(&ast_function.name, &ast_function.return_type);
@@ -675,10 +638,6 @@ impl<'input> Builder {
 
                 self.put_call(ir_context, call_label, result_label.to_owned(), arguments.clone());
 
-                for argument in &arguments {
-                    self.recycle_local(ir_context, function, argument);
-                }
-
                 return result_label;
             },
             ast::Expression::VariableExpression(variable_identifier) => {
@@ -696,8 +655,6 @@ impl<'input> Builder {
 
                 self.put_fetch(ir_context, label.to_owned(), (variable_label, index_expression.to_owned()));
 
-                self.recycle_local(ir_context, function, &index_expression);
-
                 return label;
             },
             ast::Expression::BinaryExpression { left_expression, operator, right_expression} => {
@@ -713,8 +670,6 @@ impl<'input> Builder {
 
                     self.put_promote(ir_context, temp.to_owned(), operand1.to_owned());
 
-                    self.recycle_local(ir_context, function, &operand1);
-
                     operand1 = temp;
                     operand1_type = ast::VariableType::Real;
 
@@ -723,8 +678,6 @@ impl<'input> Builder {
                     self.put_local(ir_context, temp.to_owned(), &ast::VariableType::Real);
 
                     self.put_promote(ir_context, temp.to_owned(), operand2.to_owned());
-
-                    self.recycle_local(ir_context, function, &operand2);
 
                     operand2 = temp;
                     // operand2_type = ast::VariableType::Real; // not needed since never used later
@@ -752,9 +705,6 @@ impl<'input> Builder {
 
                 self.put_binary_op(ir_context, result_local.to_owned(), op, operand1.to_owned(), operand2.to_owned());
 
-                self.recycle_local(ir_context, function, &operand1);
-                self.recycle_local(ir_context, function, &operand2);
-
                 return result_local;
             },
             ast::Expression::UnaryExpression { expression, operator } => {
@@ -771,8 +721,6 @@ impl<'input> Builder {
                 };
 
                 self.put_unary_op(ir_context, result_local.to_owned(), op, operand.to_owned());
-
-                self.recycle_local(ir_context, function, &operand);
 
                 return result_local;
             },
