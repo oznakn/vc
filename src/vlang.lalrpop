@@ -45,14 +45,8 @@ pub Variable: ast::Variable<'input> =
 pub VariableType: ast::VariableType = {
     "int" => ast::VariableType::Int,
     "real" => ast::VariableType::Real,
-    "int" "[" <n:"int_literal"> "]" => ast::VariableType::IntVector {
-        has_size: true,
-        size: n as u64,
-    },
-    "real" "[" <n:"int_literal"> "]" => ast::VariableType::RealVector {
-        has_size: true,
-        size: n as u64,
-    },
+    "int" "[" <n:"int_literal"> "]" => ast::VariableType::IntVector(n as u64, true),
+    "real" "[" <n:"int_literal"> "]" => ast::VariableType::RealVector(n as u64, true),
 };
 
 pub Parameter: ast::Parameter<'input> =
@@ -65,22 +59,10 @@ pub Parameter: ast::Parameter<'input> =
 pub ParameterType: ast::VariableType = {
     "int" => ast::VariableType::Int,
     "real" => ast::VariableType::Real,
-    "int" "[" <n:"int_literal"> "]" => ast::VariableType::IntVector {
-        has_size: true,
-        size: n as u64,
-    },
-    "int" "[" "]" => ast::VariableType::IntVector {
-        has_size: false,
-        size: 0,
-    },
-    "real" "[" <n:"int_literal"> "]" => ast::VariableType::RealVector {
-        has_size: true,
-        size: n as u64,
-    },
-    "real" "[" "]" => ast::VariableType::RealVector {
-        has_size: false,
-        size: 0,
-    },
+    "int" "[" <n:"int_literal"> "]" => ast::VariableType::IntVector(n as u64, true),
+    "int" "[" "]" => ast::VariableType::IntVector(0, false),
+    "real" "[" <n:"int_literal"> "]" => ast::VariableType::RealVector(n as u64, true),
+    "real" "[" "]" => ast::VariableType::RealVector(0, false),
 };
 
 pub Function: ast::Function<'input> =

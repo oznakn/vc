@@ -71,9 +71,11 @@ impl<'input> FunctionScope<'input> {
 pub struct SymbolTable<'input> {
     pub functions: HashMap<&'input str, FunctionScope<'input>>,
     pub variables: HashMap<&'input str, &'input ast::VariableType>,
-    pub function_call_list: HashSet<&'input str>,
+    function_call_list: HashSet<&'input str>,
     pub function_call_argument_map: HashMap<&'input str, Vec<Vec<ast::VariableType>>>,
     pub strings: HashSet<&'input str>,
+    pub ints: HashSet<i64>,
+    pub reals: Vec<f64>,
 }
 
 impl<'input> SymbolTable<'input> {
@@ -84,6 +86,8 @@ impl<'input> SymbolTable<'input> {
             function_call_list: HashSet::new(),
             function_call_argument_map: HashMap::new(),
             strings: HashSet::new(),
+            ints: HashSet::new(),
+            reals: Vec::new(),
         };
     }
 
@@ -276,9 +280,8 @@ impl<'input> SymbolTable<'input> {
         return Ok(());
     }
 
-    #[inline]
     fn check_expression(&mut self, functions: &HashMap<&'input str, FunctionScope<'input>>, function_scope: &FunctionScope<'input>, expression: &'input ast::Expression<'input>) -> Result<ast::VariableType, SymbolTableError<'input>> {
-        return match expression {
+        match expression {
             ast::Expression::FunctionCallExpression { name, argument_list } => {
                 self.function_call_list.insert(name);
 
@@ -333,8 +336,16 @@ impl<'input> SymbolTable<'input> {
             ast::Expression::UnaryExpression { expression, operator: _} => {
                 return Ok(self.check_expression(functions, function_scope, expression)?.clone());
             },
-            ast::Expression::IntExpression(_) => Ok(ast::VariableType::Int),
-            ast::Expression::RealExpression(_) => Ok(ast::VariableType::Real),
+            ast::Expression::IntExpression(value) => {
+                self.ints.insert(*value);
+
+                return Ok(ast::VariableType::Int);
+            },
+            ast::Expression::RealExpression(value) => {
+                self.reals.push(*value);
+
+                return Ok(ast::VariableType::Real);
+            },
             ast::Expression::Empty => unreachable!(),
         }
     }
@@ -402,6 +413,7 @@ impl<'input> SymbolTable<'input> {
         // dbg!(&self.self);
 
         symbol_table.strings.insert(" "); // used in comma separated print
+        symbol_table.ints.insert(-1); // used in unary minus operator
         symbol_table.functions.extend(functions);
 
         return Ok(symbol_table);

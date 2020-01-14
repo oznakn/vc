@@ -56,6 +56,7 @@ pub fn convert_to_string(items: &Vec<GeneratedCodeItem>) -> String {
 
 #[derive(Clone, Debug)]
 pub struct CodeGenerator<'ir> {
+    is_ro_data_section_started: bool,
     is_data_section_started: bool,
     is_text_section_started: bool,
     current_function: Option<&'ir ir::Function>,
@@ -64,9 +65,17 @@ pub struct CodeGenerator<'ir> {
 impl<'ir> CodeGenerator<'ir> {
     pub fn new() -> Self {
         return CodeGenerator {
+            is_ro_data_section_started: false,
             is_data_section_started: false,
             is_text_section_started: false,
             current_function: None,
+        }
+    }
+
+    fn check_ro_data_section(&mut self, items: &mut Vec<GeneratedCodeItem>) {
+        if !self.is_ro_data_section_started {
+            items.push(GeneratedCodeItem::Section("\n.rodata".to_string()));
+            self.is_ro_data_section_started = true;
         }
     }
 
@@ -86,6 +95,12 @@ impl<'ir> CodeGenerator<'ir> {
 
     fn visit(&mut self, items: &mut Vec<GeneratedCodeItem>, ir_item: &'ir ir::IRItem) {
         match ir_item {
+            ir::IRItem::ConstString(label, s) => {
+                self.check_ro_data_section(items);
+
+                items.push(GeneratedCodeItem::Label(format!("{}", label)));
+                items.push(GeneratedCodeItem::Instruction(".string".to_string(), vec![format!("\"{}\"", s)])); // .ascii .asciz
+            },
             ir::IRItem::Start() => {
                 self.check_text_section(items);
 
@@ -98,14 +113,8 @@ impl<'ir> CodeGenerator<'ir> {
             ir::IRItem::Var(label, size) => {
                 self.check_data_section(items);
 
-                items.push(GeneratedCodeItem::Label(ir::format_variable_label(label)));
+                items.push(GeneratedCodeItem::Label(format!("{}", label)));
                 items.push(GeneratedCodeItem::Instruction(".zero".to_string(), vec![format!("{}", size)]));
-            },
-            ir::IRItem::VarString(label, s) => {
-                self.check_data_section(items);
-
-                items.push(GeneratedCodeItem::Label(ir::format_variable_label(label)));
-                items.push(GeneratedCodeItem::Instruction(".string".to_string(), vec![format!("\"{}\"", s)])); // .ascii .asciz
             },
             ir::IRItem::Label(label) => {
                 self.check_text_section(items);

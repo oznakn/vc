@@ -37,16 +37,11 @@ pub struct Declaration<'input> {
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum VariableType {
+    String(u64),
     Int,
-    IntVector {
-        size: u64,
-        has_size: bool,
-    },
+    IntVector(u64, bool),
     Real,
-    RealVector {
-        size: u64,
-        has_size: bool,
-    },
+    RealVector(u64, bool),
 }
 
 impl VariableType {
@@ -70,8 +65,9 @@ impl VariableType {
         return match self {
             VariableType::Int => 4,
             VariableType::Real => 8,
-            VariableType::IntVector { size, .. } => (*size) * 4,
-            VariableType::RealVector { size, .. } => (*size) * 8,
+            VariableType::IntVector(size, _) => (*size) * 4,
+            VariableType::RealVector(size,_) => (*size) * 8,
+            VariableType::String(size) => *size,
         }
     }
 
@@ -89,8 +85,9 @@ impl fmt::Display for VariableType {
         return match self {
             VariableType::Int => write!(f, "int"),
             VariableType::Real => write!(f, "real"),
-            VariableType::IntVector { size, .. } => write!(f, "int_{}", size),
-            VariableType::RealVector { size, .. } => write!(f, "real_{}", size),
+            VariableType::IntVector(size, _) => write!(f, "int_{}", size),
+            VariableType::RealVector(size, _) => write!(f, "real_{}", size),
+            VariableType::String (size)=> write!(f, "string_{}", size),
         }
     }
 }
