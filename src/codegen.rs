@@ -326,20 +326,37 @@ impl<'ir> CodeGenerator<'ir> {
         }
     }
 
-    fn value_storage_to_string(&self, ir_context: &'ir ir::IRContext, s: &'ir ir::ValueStorage) -> String {
+    fn value_storage_to_string(&self, ir_context: &'ir ir::IRContext, s: &'ir ir::ValueStorage, write_data: bool) -> String {
+        let f = self.current_function.unwrap();
+
+        let variable_type = fetch_variable_type(ir_context, f,s);
+
         return match s {
             ir::ValueStorage::Const(i) => {
-                let f = self.current_function.unwrap();
-
-                let variable_type = fetch_variable_type(ir_context, f,s);
-
                 return match variable_type {
-                   ast::VariableType::Real => format!("C{}, a5", i),
+                    ast::VariableType::Real => format!("C{}, a6", i),
+                    ast::VariableType::Int => {
+                        if write_data {
+                            format!("C{}, a6", i)
+                        } else {
+                            format!("C{}", i)
+                        }
+                    },
                     _ => format!("C{}", i),
                 }
             },
             ir::ValueStorage::Var(i) => {
-                format!("V{}", i)
+                return match variable_type {
+                    ast::VariableType::Real => format!("V{}, a6", i),
+                    ast::VariableType::Int => {
+                        if write_data {
+                            format!("V{}, a6", i)
+                        } else {
+                            format!("V{}", i)
+                        }
+                    },
+                    _ => format!("V{}", i),
+                }
             },
             ir::ValueStorage::Local(_) => {
                 let stack_offset_map = self.get_stack_offset_map();
@@ -360,7 +377,7 @@ impl<'ir> CodeGenerator<'ir> {
         }
 
         if let Some(instruction) = instruction_option {
-            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec![register.to_string(), self.value_storage_to_string(ir_context, storage)]));
+            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec![register.to_string(), self.value_storage_to_string(ir_context, storage, false)]));
         }
     }
 
@@ -377,7 +394,7 @@ impl<'ir> CodeGenerator<'ir> {
         }
 
         if let Some(instruction) = instruction_option {
-            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec![register.to_string(), self.value_storage_to_string(ir_context, storage)]));
+            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec![register.to_string(), self.value_storage_to_string(ir_context, storage, false)]));
         }
     }
 
@@ -393,7 +410,7 @@ impl<'ir> CodeGenerator<'ir> {
         }
 
         if let Some(instruction) = instruction_option {
-            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec![register.to_string(), self.value_storage_to_string(ir_context, storage)]));
+            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec![register.to_string(), self.value_storage_to_string(ir_context, storage, true)]));
         }
     }
 
@@ -410,7 +427,7 @@ impl<'ir> CodeGenerator<'ir> {
         }
 
         if let Some(instruction) = instruction_option {
-            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec!["a0".to_string(), self.value_storage_to_string(ir_context, from)]));
+            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec!["a0".to_string(), self.value_storage_to_string(ir_context, from, false)]));
         }
 
         // Part 2
