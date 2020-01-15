@@ -261,14 +261,14 @@ impl<'input> SymbolTable<'input> {
                     self.check_statement(functions, function_scope, item)?;
                 }
             },
-            ast::Statement::ForStatement { init_variable, start_expression, to_expression, by_expression, body } => {
-                let init_variable_type = self.fetch_variable_type( function_scope, init_variable)?;
+            ast::Statement::ForStatement { .. } => {
+                /*let init_variable_type = self.fetch_variable_type( function_scope, init_variable)?;
 
                 let start_expression_type = self.check_expression(functions, function_scope, start_expression)?;
 
                 let to_expression_type = self.check_expression(functions, function_scope, to_expression)?;
 
-                let mut by_expression_type_option = None;
+                /* let mut by_expression_type_option = None;
 
                 match by_expression {
                     ast::Expression::Empty => {},
@@ -276,8 +276,11 @@ impl<'input> SymbolTable<'input> {
                         by_expression_type_option = Some(self.check_expression(functions, function_scope, by_expression)?);
                     }
                 }
+                */
 
-                if !init_variable_type.eq(&start_expression_type) {
+                /*
+                 TODO
+                 if !init_variable_type.eq(&start_expression_type) {
                     return Err(SymbolTableError::TypesNotMatchError);
                 }
 
@@ -290,10 +293,11 @@ impl<'input> SymbolTable<'input> {
                         return Err(SymbolTableError::TypesNotMatchError);
                     }
                 }
+                */
 
                 for item in body {
                     self.check_statement(functions, function_scope, item)?;
-                }
+                } */
             },
             ast::Statement::ReturnStatement { expression } => {
                 let expression_type = self.check_expression(functions, function_scope, expression)?;

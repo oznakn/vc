@@ -335,26 +335,26 @@ impl<'ir> CodeGenerator<'ir> {
 
         return match s {
             ir::ValueStorage::Const(i) => {
-                return match variable_type {
-                    ast::VariableType::Real => format!("C{}, a6", i),
-                    ast::VariableType::Int => {
+                match variable_type {
+                    ast::VariableType::Int => format!("C{}", i),
+                    ast::VariableType::Real => {
                         if write_data {
                             format!("C{}, a6", i)
                         } else {
-                            format!("C{}", i)
+                            format!("C{}, a6", i)
                         }
                     },
                     _ => format!("C{}", i),
                 }
             },
             ir::ValueStorage::Var(i) => {
-                return match variable_type {
-                    ast::VariableType::Real => format!("V{}, a6", i),
-                    ast::VariableType::Int => {
+                match variable_type {
+                    ast::VariableType::Int => format!("V{}", i),
+                    ast::VariableType::Real => {
                         if write_data {
                             format!("V{}, a6", i)
                         } else {
-                            format!("V{}", i)
+                            format!("V{}, a6", i)
                         }
                     },
                     _ => format!("V{}", i),
@@ -419,23 +419,12 @@ impl<'ir> CodeGenerator<'ir> {
         // PART 1
         let variable_type = fetch_variable_type(ir_context, self.current_function.unwrap(), from);
 
-        let mut instruction_option = None;
-
         match variable_type {
-            ast::VariableType::Int => instruction_option = Some("lw"),
-            ast::VariableType::Real => instruction_option = Some("fld"),
-            _ => {},
-        }
+            ast::VariableType::Int =>
+                self.items.push(GeneratedCodeItem::Instruction("lw".to_string(), vec!["a0".to_string(), self.value_storage_to_string(ir_context, from, false)])),
 
-        if let Some(instruction) = instruction_option {
-            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec!["a0".to_string(), self.value_storage_to_string(ir_context, from, false)]));
-        }
-
-        // Part 2
-
-        match variable_type {
-            ast::VariableType::Int => instruction_option = Some("sw"),
-            ast::VariableType::Real => instruction_option = Some("fsd"),
+            ast::VariableType::Real =>
+                self.items.push(GeneratedCodeItem::Instruction("fld".to_string(), vec!["fa0".to_string(), self.value_storage_to_string(ir_context, from, false)])),
             _ => {},
         }
 
@@ -444,8 +433,13 @@ impl<'ir> CodeGenerator<'ir> {
             - (*offset as i64)
                 + (*stack_offset_map.get(to).unwrap() as i64);
 
-        if let Some(instruction) = instruction_option {
-            self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec!["a0".to_string(), format!("{}(sp)", variable_offset)]));
+        match variable_type {
+            ast::VariableType::Int =>
+                self.items.push(GeneratedCodeItem::Instruction("sw".to_string(), vec!["a0".to_string(), format!("{}(sp)", variable_offset)])),
+
+            ast::VariableType::Real =>
+                self.items.push(GeneratedCodeItem::Instruction("fsd".to_string(), vec!["fa0".to_string(), format!("{}(sp)", variable_offset)])),
+            _ => {},
         }
     }
 
@@ -508,7 +502,17 @@ impl<'ir> CodeGenerator<'ir> {
 
                 let offset = self.function_stack_offset_map.get(&f.name).unwrap().0;
 
-                self.load_value_storage_to_register(ir_context, s, "a0");
+                let variable_type = fetch_variable_type(ir_context, f, s);
+
+                match variable_type {
+                    ast::VariableType::Int => {
+                        self.load_value_storage_to_register(ir_context, s, "a0");
+                    },
+                    ast::VariableType::Real => {
+                        self.load_value_storage_to_register(ir_context, s, "fa0");
+                    },
+                    _ => {},
+                }
 
                 self.items.push(GeneratedCodeItem::Instruction("ld".to_string(), vec!["ra".to_owned(), self.get_jump_address()]));
                 self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["sp".to_owned(), "sp".to_owned(), format!("{}", offset)]));
@@ -583,15 +587,16 @@ impl<'ir> CodeGenerator<'ir> {
             ir::IRItem::Promote(to, from) => {
                 self.load_value_storage_to_register(ir_context, from, "t0");
 
-                self.items.push(GeneratedCodeItem::Instruction("fcvt.d.w".to_string(), vec!["ft0".to_owned(), "to".to_owned()]));
+                self.items.push(GeneratedCodeItem::Instruction("fcvt.d.w".to_string(), vec!["ft0".to_owned(), "t0".to_owned()]));
 
                 self.store_register_to_value_storage(ir_context, to, "ft0");
             },
             ir::IRItem::BinaryOp(storage, op, operand1, operand2) => {
                 let f = self.current_function.unwrap();
-                let value_type = fetch_variable_type(ir_context, f, operand1);
+                let value_type1 = fetch_variable_type(ir_context, f, operand1);
+                let value_type2 = fetch_variable_type(ir_context, f, operand2);
 
-                if value_type == ast::VariableType::Int {
+                if value_type1 == ast::VariableType::Int && value_type2 == ast::VariableType::Int {
                     self.load_value_storage_to_register(ir_context, operand1, "t1");
                     self.load_value_storage_to_register(ir_context, operand2, "t2");
 
@@ -645,51 +650,54 @@ impl<'ir> CodeGenerator<'ir> {
                     }
 
                     self.store_register_to_value_storage(ir_context, storage, "t0");
-                } else if value_type == ast::VariableType::Real {
-                    self.load_value_storage_to_register(ir_context, operand1, "ft1");
-                    self.load_value_storage_to_register(ir_context, operand2, "ft2");
+                } else {
+                    let operand1_register = "fa1";
+                    let operand2_register = "fa2";
+
+                    self.load_value_storage_to_register(ir_context, operand1, operand1_register);
+                    self.load_value_storage_to_register(ir_context, operand2, operand2_register);
 
                     let mut result_register = "t0";
 
                     match op {
                         ir::Op::Add => {
-                            self.items.push(GeneratedCodeItem::Instruction("fadd.d".to_string(), vec!["ft0".to_owned(), "ft1".to_owned(), "ft2".to_owned()]));
+                            self.items.push(GeneratedCodeItem::Instruction("fadd.d".to_string(), vec!["ft0".to_owned(), operand1_register.to_owned(), operand2_register.to_owned()]));
                             result_register = "ft0";
                         },
                         ir::Op::Sub => {
-                            self.items.push(GeneratedCodeItem::Instruction("fsub.d".to_string(), vec!["ft0".to_owned(), "ft1".to_owned(), "ft2".to_owned()]));
+                            self.items.push(GeneratedCodeItem::Instruction("fsub.d".to_string(), vec!["ft0".to_owned(), operand1_register.to_owned(), operand2_register.to_owned()]));
                             result_register = "ft0";
                         },
                         ir::Op::Mul => {
-                            self.items.push(GeneratedCodeItem::Instruction("fmul.d".to_string(), vec!["ft0".to_owned(), "ft1".to_owned(), "ft2".to_owned()]));
+                            self.items.push(GeneratedCodeItem::Instruction("fmul.d".to_string(), vec!["ft0".to_owned(), operand1_register.to_owned(), operand2_register.to_owned()]));
                             result_register = "ft0";
                         },
                         ir::Op::Div => {
-                            self.items.push(GeneratedCodeItem::Instruction("fdiv.d".to_string(), vec!["ft0".to_owned(), "ft1".to_owned(), "ft2".to_owned()]));
+                            self.items.push(GeneratedCodeItem::Instruction("fdiv.d".to_string(), vec!["ft0".to_owned(), operand1_register.to_owned(), operand2_register.to_owned()]));
                             result_register = "ft0";
                         },
                         ir::Op::Eq => {
-                            self.items.push(GeneratedCodeItem::Instruction("fsub.d".to_string(), vec!["ft0".to_owned(), "ft1".to_owned(), "ft2".to_owned()]));
+                            self.items.push(GeneratedCodeItem::Instruction("fsub.d".to_string(), vec!["ft0".to_owned(), operand1_register.to_owned(), operand2_register.to_owned()]));
                             self.items.push(GeneratedCodeItem::Instruction("fcvt.w.d".to_string(), vec!["t0".to_owned(), "ft0".to_owned()]));
                             self.items.push(GeneratedCodeItem::Instruction("seqz".to_string(), vec!["t0".to_owned(), "ft0".to_owned()]));
                         },
                         ir::Op::NotEq => {
-                            self.items.push(GeneratedCodeItem::Instruction("fsub.d".to_string(), vec!["ft0".to_owned(), "ft1".to_owned(), "ft2".to_owned()]));
+                            self.items.push(GeneratedCodeItem::Instruction("fsub.d".to_string(), vec!["ft0".to_owned(), operand1_register.to_owned(), operand2_register.to_owned()]));
                             self.items.push(GeneratedCodeItem::Instruction("fcvt.w.d".to_string(), vec!["t0".to_owned(), "ft0".to_owned()]));
                             self.items.push(GeneratedCodeItem::Instruction("snez".to_string(), vec!["t0".to_owned(), "t0".to_owned()]));
                         },
                         ir::Op::Greater => {
-                            self.items.push(GeneratedCodeItem::Instruction("fgt.d".to_string(), vec!["t0".to_owned(), "ft1".to_owned(), "ft2".to_owned()]));
+                            self.items.push(GeneratedCodeItem::Instruction("fgt.d".to_string(), vec!["t0".to_owned(), operand1_register.to_owned(), operand2_register.to_owned()]));
                         },
                         ir::Op::GreaterEq => {
-                            self.items.push(GeneratedCodeItem::Instruction("flt.d".to_string(), vec!["t0".to_owned(), "ft1".to_owned(), "ft2".to_owned()]));
+                            self.items.push(GeneratedCodeItem::Instruction("flt.d".to_string(), vec!["t0".to_owned(), operand1_register.to_owned(), operand2_register.to_owned()]));
                             self.items.push(GeneratedCodeItem::Instruction("seqz".to_string(), vec!["t0".to_owned(), "t0".to_owned()]));
                         },
                         ir::Op::Less => {
-                            self.items.push(GeneratedCodeItem::Instruction("slt".to_string(), vec!["t0".to_owned(), "ft1".to_owned(), "ft2".to_owned()]));
+                            self.items.push(GeneratedCodeItem::Instruction("slt".to_string(), vec!["t0".to_owned(), operand1_register.to_owned(), operand2_register.to_owned()]));
                         },
                         ir::Op::LessEq => {
-                            self.items.push(GeneratedCodeItem::Instruction("fgt.d".to_string(), vec!["t0".to_owned(), "ft1".to_owned(), "ft2".to_owned()]));
+                            self.items.push(GeneratedCodeItem::Instruction("fgt.d".to_string(), vec!["t0".to_owned(), operand1_register.to_owned(), operand2_register.to_owned()]));
                             self.items.push(GeneratedCodeItem::Instruction("seqz".to_string(), vec!["t0".to_owned(), "t0".to_owned()]));
                         },
                         _ => {
@@ -701,19 +709,38 @@ impl<'ir> CodeGenerator<'ir> {
                 }
             },
             ir::IRItem::UnaryOp(storage, op, operand) => {
-                self.load_value_storage_to_register(ir_context, operand, "t1");
-
                 match op {
                     ir::Op::Negative => {
-                        self.items.push(GeneratedCodeItem::Instruction("sub".to_string(), vec!["x0".to_owned(), "t1".to_owned()]));
+                        let f = self.current_function.unwrap();
+                        let value_type = fetch_variable_type(ir_context, f, operand);
+
+                        match value_type {
+                            ast::VariableType::Int => {
+                                self.load_value_storage_to_register(ir_context, operand, "t1");
+
+                                self.items.push(GeneratedCodeItem::Instruction("sub".to_string(), vec!["t1".to_owned(), "x0".to_owned(), "t1".to_owned()]));
+
+                                self.store_register_to_value_storage(ir_context, storage, "t0");
+                            },
+                            ast::VariableType::Real => {
+                                self.items.push(GeneratedCodeItem::Instruction("fcvt.d.w".to_string(), vec!["t1".to_owned(), "ft0".to_owned(), "x0".to_owned()]));
+
+                                self.items.push(GeneratedCodeItem::Instruction("fsub.d".to_string(), vec!["tf0".to_owned(), "ft1".to_owned()]));
+
+                                self.store_register_to_value_storage(ir_context, storage, "ft0");
+                            },
+                            _ => {}
+                        }
                     },
                     ir::Op::Not => {
+                        self.load_value_storage_to_register(ir_context, operand, "t1");
+
                         self.items.push(GeneratedCodeItem::Instruction("seqz".to_string(), vec!["t0".to_owned(), "t1".to_owned()]));
+
+                        self.store_register_to_value_storage(ir_context, storage, "t0");
                     },
                     _ => {},
                 }
-
-                self.store_register_to_value_storage(ir_context, storage, "t0");
             },
             ir::IRItem::Call(label, s, items) => {
                 let call_function = ir_context.function_map.get(label).unwrap();
@@ -726,7 +753,16 @@ impl<'ir> CodeGenerator<'ir> {
                 }
 
                 self.items.push(GeneratedCodeItem::Instruction("call".to_string(), vec![label.to_owned()]));
-                self.store_register_to_value_storage(ir_context, s, "a0");
+
+                match call_function.return_type {
+                    ast::VariableType::Int => {
+                        self.store_register_to_value_storage(ir_context, s, "a0");
+                    },
+                    ast::VariableType::Real => {
+                        self.store_register_to_value_storage(ir_context, s, "fa0");
+                    },
+                    _ => {},
+                }
             },
             ir::IRItem::Store(pointer, storage) => {
                 let f = self.current_function.unwrap();
@@ -777,14 +813,15 @@ impl<'ir> CodeGenerator<'ir> {
                 match variable_type.plain() {
                     ast::VariableType::Int => {
                         self.items.push(GeneratedCodeItem::Instruction("lw".to_string(), vec!["t3".to_owned(), "0(t0)".to_owned()]));
+                        self.store_register_to_value_storage(ir_context, storage, "t3");
+
                     },
                     ast::VariableType::Real => {
-                        self.items.push(GeneratedCodeItem::Instruction("fld".to_string(), vec!["t3".to_owned(), "0(t0)".to_owned()]));
+                        self.items.push(GeneratedCodeItem::Instruction("fld".to_string(), vec!["ft3".to_owned(), "0(t0)".to_owned()]));
+                        self.store_register_to_value_storage(ir_context, storage, "ft3");
                     },
                     _ => {},
                 }
-
-                self.store_register_to_value_storage(ir_context, storage, "t3");
             }
             _ => {},
         }

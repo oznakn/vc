@@ -4,8 +4,5 @@
 .vscode
 
 *.log
-*.v
-*.s
-*.S
 *.o
 *.out

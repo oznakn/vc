@@ -49,6 +49,7 @@ impl VariableType {
         return match parameter {
             VariableType::IntVector { .. } => self.requires_index() && self.plain() == VariableType::Int,
             VariableType::RealVector { .. } => self.requires_index() && self.plain() == VariableType::Real,
+            VariableType::Real { .. } => true,
             _ => self.eq(parameter),
         }
     }

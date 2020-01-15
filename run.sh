@@ -1,12 +1,7 @@
 #!/usr/bin/env sh
 
-# riscv64-linux-gnu-gcc -nostdlib test.S -o test && \
-#  rv-jit test.out
-#
-#rm -f test.o
+riscv64-linux-gnu-as "examples/$1.s" -o "examples/$1.o" && \
+  riscv64-linux-gnu-ld "examples/$1.o" -o "examples/$1.out" && \
+  rv-sim "examples/$1.out"
 
-riscv64-linux-gnu-as test.s -o test.o && \
-  riscv64-linux-gnu-ld test.o -o test.out && \
-  rv-sim test.out
-
-rm -f test.o
+rm -f "examples/$1.o" "examples/$1.out"

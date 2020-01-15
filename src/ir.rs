@@ -478,7 +478,7 @@ impl<'input> Builder {
                     let temp = self.generate_local(function, &ast::VariableType::Real);
                     self.put_local(ir_context, temp.to_owned(), &ast::VariableType::Real);
 
-                    self.put_move(ir_context, temp.to_owned(), result);
+                    self.put_promote(ir_context, temp.to_owned(), result);
 
                     result = temp;
                 }
@@ -698,25 +698,24 @@ impl<'input> Builder {
                 else if *operator == ast::BinaryOperator::Division {
                     result_type = ast::VariableType::Real;
                 }
-                else {
-                    if operand1_type == ast::VariableType::Int && operand2_type == ast::VariableType::Real {
-                        let temp = self.generate_local(function, &ast::VariableType::Real);
-                        self.put_local(ir_context, temp.to_owned(), &ast::VariableType::Real);
 
-                        self.put_promote(ir_context, temp.to_owned(), operand1.to_owned());
+                if operand1_type == ast::VariableType::Int && operand2_type == ast::VariableType::Real {
+                    let temp = self.generate_local(function, &ast::VariableType::Real);
+                    self.put_local(ir_context, temp.to_owned(), &ast::VariableType::Real);
 
-                        operand1 = temp;
-                        result_type = ast::VariableType::Real;
-                    }
-                    else if operand1_type == ast::VariableType::Real && operand2_type == ast::VariableType::Int {
-                        let temp = self.generate_local(function, &ast::VariableType::Real);
-                        self.put_local(ir_context, temp.to_owned(), &ast::VariableType::Real);
+                    self.put_promote(ir_context, temp.to_owned(), operand1.to_owned());
 
-                        self.put_promote(ir_context, temp.to_owned(), operand2.to_owned());
+                    operand1 = temp;
+                    result_type = ast::VariableType::Real;
+                }
+                else if operand1_type == ast::VariableType::Real && operand2_type == ast::VariableType::Int {
+                    let temp = self.generate_local(function, &ast::VariableType::Real);
+                    self.put_local(ir_context, temp.to_owned(), &ast::VariableType::Real);
 
-                        operand2 = temp;
-                        result_type = ast::VariableType::Real;
-                    }
+                    self.put_promote(ir_context, temp.to_owned(), operand2.to_owned());
+
+                    operand2 = temp;
+                    result_type = ast::VariableType::Real;
                 }
 
                 let result_local = self.generate_local(function, &result_type);
@@ -835,15 +834,6 @@ impl<'input> Builder {
                 }
             } else if ast_function.name.eq(MAIN_FUNCTION) {
                 builder.build_function(&mut ir_context, symbol_table, ast_function, &Vec::new());
-            }
-        }
-
-        // For debugging purposes
-        for item in &ir_context.items {
-            match item {
-                IRItem::Label(_) => println!("{}", item),
-                IRItem::Function(_) => println!("{}", item),
-                _ => println!("    {}", item),
             }
         }
 
