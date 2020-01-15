@@ -585,7 +585,7 @@ impl<'input> Builder {
 
                 let start_expression_value = self.build_expression(ir_context, symbol_table, function, start_expression);
 
-                self.put_move(ir_context, init_variable_context.0.to_owned(), start_expression_value.clone());
+                self.put_move(ir_context, init_variable_context.0.to_owned(), start_expression_value);
 
                 let to_expression_value = self.build_expression(ir_context, symbol_table, function, to_expression);
                 let by_expression_value;
@@ -613,12 +613,12 @@ impl<'input> Builder {
                 self.put_label(ir_context, start_label.clone());
 
                 self.put_binary_op(ir_context, check_variable_value_storage.clone(), Op::LessEq, init_variable_context.0.to_owned(), to_expression_value);
-                self.put_bz(ir_context, continue_label.clone(), check_variable_value_storage);
+                self.put_bz(ir_context, continue_label.clone(), check_variable_value_storage.clone());
 
                 for statement in body {
                     self.build_statement(ir_context, symbol_table, function, statement);
                 }
-                self.put_binary_op(ir_context,  start_expression_value.clone(), Op::Add,start_expression_value, by_expression_value);
+                self.put_binary_op(ir_context,  init_variable_context.0.to_owned(), Op::Add,init_variable_context.0.to_owned(), by_expression_value);
 
                 self.put_jump(ir_context, start_label);
                 self.put_label(ir_context, continue_label);

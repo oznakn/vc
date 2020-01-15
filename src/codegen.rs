@@ -162,6 +162,7 @@ pub enum GeneratedCodeItem {
     Section(String),
     Label(String),
     Instruction(String, Vec<String>),
+    Raw(String),
 }
 
 impl GeneratedCodeItem {
@@ -179,6 +180,8 @@ impl GeneratedCodeItem {
                     " ".repeat(max(0, n - s.len())),
                     v.join(", "),
                 ),
+            GeneratedCodeItem::Raw(s) =>
+                format!("\n{}\n", s),
         }
     }
 }
@@ -205,9 +208,6 @@ pub fn convert_to_string(items: &Vec<GeneratedCodeItem>) -> String {
         result += "\n";
     }
 
-    result += PRINT_INTEGER_CODE;
-    result += "\n";
-    result += PRINT_REAL_CODE;
     result += "\n";
 
     return result;
@@ -298,6 +298,8 @@ impl<'ir> CodeGenerator<'ir> {
     fn check_text_section(&mut self) {
         if !self.is_text_section_started {
             self.items.push(GeneratedCodeItem::Section("\n\n.section .text".to_string()));
+            self.items.push(GeneratedCodeItem::Raw(PRINT_INTEGER_CODE.to_owned()));
+            self.items.push(GeneratedCodeItem::Raw(PRINT_REAL_CODE.to_owned()));
             self.is_text_section_started = true;
         }
     }
@@ -380,7 +382,6 @@ impl<'ir> CodeGenerator<'ir> {
             self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec![register.to_string(), self.value_storage_to_string(ir_context, storage, false)]));
         }
     }
-
 
     fn load_value_storage_to_register(&mut self, ir_context: &'ir ir::IRContext, storage: &'ir ir::ValueStorage, register: &str) {
         let variable_type = fetch_variable_type(ir_context, self.current_function.unwrap(), storage);
@@ -633,10 +634,10 @@ impl<'ir> CodeGenerator<'ir> {
                             self.items.push(GeneratedCodeItem::Instruction("divw".to_string(), vec!["t0".to_owned(), "t1".to_owned(), "t2".to_owned()]));
                         },
                         ir::Op::And => {
-
+                            self.items.push(GeneratedCodeItem::Instruction("and".to_string(), vec!["t0".to_owned(), "t1".to_owned(), "t2".to_owned()]));
                         },
                         ir::Op::Or => {
-
+                            self.items.push(GeneratedCodeItem::Instruction("or".to_string(), vec!["t0".to_owned(), "t1".to_owned(), "t2".to_owned()]));
                         },
                         _ => {
                             self.items.push(GeneratedCodeItem::Instruction("mv".to_string(), vec!["t0".to_owned(), "x0".to_owned()]));
@@ -727,6 +728,64 @@ impl<'ir> CodeGenerator<'ir> {
                 self.items.push(GeneratedCodeItem::Instruction("call".to_string(), vec![label.to_owned()]));
                 self.store_register_to_value_storage(ir_context, s, "a0");
             },
+            ir::IRItem::Store(pointer, storage) => {
+                let f = self.current_function.unwrap();
+
+                let variable_type = fetch_variable_type(ir_context, f, &pointer.0);
+
+                let stack_offset_map = self.get_stack_offset_map();
+
+                let offset = stack_offset_map.get(&pointer.0).unwrap().clone();
+
+                self.load_value_storage_to_register(ir_context, storage, "t3");
+
+                self.load_value_storage_to_register(ir_context, &pointer.1, "t1");
+                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t2".to_owned(), "x0".to_owned(), "1".to_owned()]));
+                self.items.push(GeneratedCodeItem::Instruction("subw".to_string(), vec!["t1".to_owned(), "t1".to_owned(), "t2".to_owned()]));
+                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t0".to_owned(), "sp".to_owned(), format!("{}", offset)]));
+                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t2".to_owned(), "x0".to_owned(), format!("{}", variable_type.plain().size())]));
+                self.items.push(GeneratedCodeItem::Instruction("mulw".to_string(), vec!["t1".to_owned(), "t1".to_owned(), "t2".to_owned()]));
+                self.items.push(GeneratedCodeItem::Instruction("addw".to_string(), vec!["t0".to_owned(), "t0".to_owned(), "t1".to_owned()]));
+
+                match variable_type.plain() {
+                    ast::VariableType::Int => {
+                        self.items.push(GeneratedCodeItem::Instruction("sw".to_string(), vec!["t3".to_owned(), "0(t0)".to_owned()]));
+                    },
+                    ast::VariableType::Real => {
+                        self.items.push(GeneratedCodeItem::Instruction("fsd".to_string(), vec!["t3".to_owned(), "0(t0)".to_owned()]));
+                    },
+                    _ => {},
+                }
+            },
+            ir::IRItem::Fetch(storage, pointer) => {
+                let f = self.current_function.unwrap();
+
+                let variable_type = fetch_variable_type(ir_context, f, &pointer.0);
+
+                let stack_offset_map = self.get_stack_offset_map();
+
+                let offset = stack_offset_map.get(&pointer.0).unwrap().clone();
+
+                self.load_value_storage_to_register(ir_context, &pointer.1, "t1");
+                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t2".to_owned(), "x0".to_owned(), "1".to_owned()]));
+                self.items.push(GeneratedCodeItem::Instruction("subw".to_string(), vec!["t1".to_owned(), "t1".to_owned(), "t2".to_owned()]));
+                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t0".to_owned(), "sp".to_owned(), format!("{}", offset)]));
+                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t2".to_owned(), "x0".to_owned(), format!("{}", variable_type.plain().size())]));
+                self.items.push(GeneratedCodeItem::Instruction("mulw".to_string(), vec!["t1".to_owned(), "t1".to_owned(), "t2".to_owned()]));
+                self.items.push(GeneratedCodeItem::Instruction("addw".to_string(), vec!["t0".to_owned(), "t0".to_owned(), "t1".to_owned()]));
+
+                match variable_type.plain() {
+                    ast::VariableType::Int => {
+                        self.items.push(GeneratedCodeItem::Instruction("lw".to_string(), vec!["t3".to_owned(), "0(t0)".to_owned()]));
+                    },
+                    ast::VariableType::Real => {
+                        self.items.push(GeneratedCodeItem::Instruction("fld".to_string(), vec!["t3".to_owned(), "0(t0)".to_owned()]));
+                    },
+                    _ => {},
+                }
+
+                self.store_register_to_value_storage(ir_context, storage, "t3");
+            }
             _ => {},
         }
     }

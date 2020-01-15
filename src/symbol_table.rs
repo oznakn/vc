@@ -197,6 +197,10 @@ impl<'input> SymbolTable<'input> {
     fn check_statement(&mut self, functions: &HashMap<&'input str, FunctionScope<'input>>, function_scope: &FunctionScope<'input>, statement: &'input ast::Statement<'input>) -> Result<(), SymbolTableError<'input>> {
         match statement {
             ast::Statement::AssignmentStatement { variable, expression} => {
+                if variable.use_index {
+                    self.check_expression(functions, function_scope, &variable.expression)?;
+                }
+
                 let variable_type = self.check_variable_type_matches(&function_scope, variable)?;
                 let expression_type = self.check_expression(functions, function_scope, expression)?;
 
@@ -306,11 +310,12 @@ impl<'input> SymbolTable<'input> {
     fn check_expression(&mut self, functions: &HashMap<&'input str, FunctionScope<'input>>, function_scope: &FunctionScope<'input>, expression: &'input ast::Expression<'input>) -> Result<ast::VariableType, SymbolTableError<'input>> {
         match expression {
             ast::Expression::FunctionCallExpression { name, argument_list } => {
-                if !self.functions.contains_key(name) {
+                /* if !function_scope.name.eq(*name) && !self.fu.contains_key(name) { // TODO: enable later
+                    dbg!(function_scope.name, name);
                     return Err(SymbolTableError::FunctionNotFoundError {
                         name,
                     });
-                }
+                } */
 
                 self.function_call_list.insert(name);
 
@@ -347,6 +352,10 @@ impl<'input> SymbolTable<'input> {
                 return Ok(call_function.return_type.clone());
             },
             ast::Expression::VariableExpression(variable_identifier) => {
+                if variable_identifier.use_index {
+                    self.check_expression(functions, function_scope, &variable_identifier.expression)?;
+                }
+
                 return Ok(self.check_variable_type_matches(&function_scope, variable_identifier)?.clone());
             },
             ast::Expression::BinaryExpression { left_expression, operator, right_expression} => {
