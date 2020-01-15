@@ -43,7 +43,7 @@ pub enum Op {
     And,
     Or,
     Not,
-    Neg,
+    Negative,
 }
 
 impl fmt::Display for Op {
@@ -64,7 +64,7 @@ impl fmt::Display for Op {
             Op::And => write!(f, "and"),
             Op::Or => write!(f, "or"),
             Op::Not => write!(f, "not"),
-            Op::Neg => write!(f, "-"),
+            Op::Negative => write!(f, "-"),
         }
     }
 }
@@ -543,16 +543,16 @@ impl<'input> Builder {
             ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
                 let if_expression_label = self.build_expression(ir_context, symbol_table, function, expression);
 
-                let continue_label = self.generate_label(&function.name, 0);
                 let finish_label = self.generate_label(&function.name, 0);
+                let else_label = self.generate_label(&function.name, 0);
 
-                self.put_bz(ir_context, continue_label.clone(), if_expression_label);
+                self.put_bz(ir_context, else_label.clone(), if_expression_label);
 
                 for statement in if_body {
                     self.build_statement(ir_context, symbol_table, function, statement);
                 }
                 self.put_jump(ir_context, finish_label.clone());
-                self.put_label(ir_context, continue_label);
+                self.put_label(ir_context, else_label);
 
                 if *use_else {
                     for statement in else_body {
@@ -678,30 +678,37 @@ impl<'input> Builder {
                 let mut operand1 = self.build_expression(ir_context, symbol_table, function, left_expression);
                 let mut operand2 = self.build_expression(ir_context, symbol_table, function, right_expression);
 
-                let mut operand1_type = self.fetch_value_type(ir_context, function, &operand1);
+                let operand1_type = self.fetch_value_type(ir_context, function, &operand1);
                 let operand2_type = self.fetch_value_type(ir_context, function, &operand1);
 
-                if operand1_type == ast::VariableType::Int && operand2_type == ast::VariableType::Real {
-                    let temp = self.generate_local(function, &ast::VariableType::Real);
-                    self.put_local(ir_context, temp.to_owned(), &ast::VariableType::Real);
+                let mut result_type = operand1_type.clone();
 
-                    self.put_promote(ir_context, temp.to_owned(), operand1.to_owned());
+                if *operator == ast::BinaryOperator::And || *operator == ast::BinaryOperator::Or {
+                    result_type = ast::VariableType::Int;
+                }
+                else {
+                    if operand1_type == ast::VariableType::Int && operand2_type == ast::VariableType::Real {
+                        let temp = self.generate_local(function, &ast::VariableType::Real);
+                        self.put_local(ir_context, temp.to_owned(), &ast::VariableType::Real);
 
-                    operand1 = temp;
-                    operand1_type = ast::VariableType::Real;
+                        self.put_promote(ir_context, temp.to_owned(), operand1.to_owned());
 
-                } else if operand1_type == ast::VariableType::Real && operand2_type == ast::VariableType::Int {
-                    let temp = self.generate_local(function, &ast::VariableType::Real);
-                    self.put_local(ir_context, temp.to_owned(), &ast::VariableType::Real);
+                        operand1 = temp;
+                        result_type = ast::VariableType::Real;
+                    }
+                    else if operand1_type == ast::VariableType::Real && operand2_type == ast::VariableType::Int {
+                        let temp = self.generate_local(function, &ast::VariableType::Real);
+                        self.put_local(ir_context, temp.to_owned(), &ast::VariableType::Real);
 
-                    self.put_promote(ir_context, temp.to_owned(), operand2.to_owned());
+                        self.put_promote(ir_context, temp.to_owned(), operand2.to_owned());
 
-                    operand2 = temp;
-                    // operand2_type = ast::VariableType::Real; // not needed since never used later
+                        operand2 = temp;
+                        result_type = ast::VariableType::Real;
+                    }
                 }
 
-                let result_local = self.generate_local(function, &operand1_type);
-                self.put_local(ir_context, result_local.to_owned(), &operand1_type);
+                let result_local = self.generate_local(function, &result_type);
+                self.put_local(ir_context, result_local.to_owned(), &result_type);
 
                 let op = match operator {
                     ast::BinaryOperator::Addition => Op::Add,
@@ -733,7 +740,7 @@ impl<'input> Builder {
                 self.put_local(ir_context, result_local.to_owned(), &variable_type);
 
                 let op = match operator {
-                    ast::UnaryOperator::Negative => Op::Neg,
+                    ast::UnaryOperator::Negative => Op::Negative,
                     ast::UnaryOperator::Not => Op::Not,
                 };
 

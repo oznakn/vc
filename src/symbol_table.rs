@@ -306,6 +306,12 @@ impl<'input> SymbolTable<'input> {
     fn check_expression(&mut self, functions: &HashMap<&'input str, FunctionScope<'input>>, function_scope: &FunctionScope<'input>, expression: &'input ast::Expression<'input>) -> Result<ast::VariableType, SymbolTableError<'input>> {
         match expression {
             ast::Expression::FunctionCallExpression { name, argument_list } => {
+                if !self.functions.contains_key(name) {
+                    return Err(SymbolTableError::FunctionNotFoundError {
+                        name,
+                    });
+                }
+
                 self.function_call_list.insert(name);
 
                 let mut argument_types = Vec::new();
