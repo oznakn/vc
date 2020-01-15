@@ -683,8 +683,20 @@ impl<'input> Builder {
 
                 let mut result_type = operand1_type.clone();
 
-                if *operator == ast::BinaryOperator::And || *operator == ast::BinaryOperator::Or {
+                if *operator == ast::BinaryOperator::And
+                    || *operator == ast::BinaryOperator::Or
+                    || *operator == ast::BinaryOperator::IntDivision
+                    || *operator == ast::BinaryOperator::Equal
+                    || *operator == ast::BinaryOperator::NotEqual
+                    || *operator == ast::BinaryOperator::Greater
+                    || *operator == ast::BinaryOperator::GreaterEqual
+                    || *operator == ast::BinaryOperator::Less
+                    || *operator == ast::BinaryOperator::LessEqual
+                {
                     result_type = ast::VariableType::Int;
+                }
+                else if *operator == ast::BinaryOperator::Division {
+                    result_type = ast::VariableType::Real;
                 }
                 else {
                     if operand1_type == ast::VariableType::Int && operand2_type == ast::VariableType::Real {

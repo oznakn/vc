@@ -353,12 +353,22 @@ impl<'input> SymbolTable<'input> {
                 let operand1_type = self.check_expression(functions, function_scope, left_expression)?;
                 let operand2_type = self.check_expression(functions, function_scope, right_expression)?;
 
-                if *operator == ast::BinaryOperator::IntDivision && (operand1_type != ast::VariableType::Int || operand2_type != ast::VariableType::Int) {
-                    return Err(SymbolTableError::TypesNotMatchError);
+                if *operator == ast::BinaryOperator::And
+                    || *operator == ast::BinaryOperator::Or
+                    || *operator == ast::BinaryOperator::IntDivision
+                    || *operator == ast::BinaryOperator::NotEqual
+                    || *operator == ast::BinaryOperator::Greater
+                    || *operator == ast::BinaryOperator::GreaterEqual
+                    || *operator == ast::BinaryOperator::Less
+                    || *operator == ast::BinaryOperator::LessEqual
+                {
+                    return Ok(ast::VariableType::Int);
                 }
-
-                if (operand1_type == ast::VariableType::Int && operand2_type == ast::VariableType::Real)
-                    || (operand1_type == ast::VariableType::Real && operand2_type == ast::VariableType::Int ) {
+                else if *operator == ast::BinaryOperator::Division {
+                    return Ok(ast::VariableType::Real);
+                }
+                else if (operand1_type == ast::VariableType::Int && operand2_type == ast::VariableType::Real)
+                    || (operand1_type == ast::VariableType::Real && operand2_type == ast::VariableType::Int) {
                     return Ok(ast::VariableType::Real);
                 }
 
