@@ -116,6 +116,10 @@ impl<'input> Lexer<'input> {
         let start = self.curr.0;
         let mut pos = start;
 
+        let mut sci_start = 0;
+        let mut sci_pos = 0;
+        let mut sci_sign = 1;
+
         let mut is_integer: bool = true;
         let mut dot_seen: bool = false;
         let mut e_seen: bool = false;
@@ -123,7 +127,11 @@ impl<'input> Lexer<'input> {
 
         while self.has_char() {
             if self.curr_char().is_numeric() {
-                pos += 1;
+                if e_seen {
+                    sci_pos += 1;
+                } else {
+                    pos += 1;
+                }
 
                 self.next_char();
             } else if self.curr_char() == '.' {
@@ -134,7 +142,11 @@ impl<'input> Lexer<'input> {
                     });
                 }
 
-                pos += 1;
+                if e_seen {
+                    sci_pos += 1;
+                } else {
+                    pos += 1;
+                }
                 is_integer = false;
                 dot_seen = true;
 
@@ -147,8 +159,9 @@ impl<'input> Lexer<'input> {
                     });
                 }
 
-                pos += 1;
                 e_seen = true;
+                sci_start = pos + 1;
+                sci_pos = sci_start;
 
                 self.next_char();
             } else if self.curr_char() == '+' || self.curr_char() == '-' {
@@ -159,7 +172,12 @@ impl<'input> Lexer<'input> {
                     });
                 }
 
-                pos += 1;
+                if self.curr_char() == '-' {
+                    sci_sign = -1;
+                }
+
+                sci_start = sci_pos + 1;
+                sci_pos = sci_start;
                 e_sign_seen = true;
 
                 self.next_char();
@@ -174,8 +192,17 @@ impl<'input> Lexer<'input> {
             return Ok((start, Token::IntLiteral(result), pos));
         }
 
-        let result: f64 = self.source[start..pos].parse::<f64>().unwrap();
+        let mut coefficient: i32 = 0;
 
+        if e_seen {
+            coefficient = self.source[sci_start..sci_pos].parse::<u32>().unwrap() as i32;
+            coefficient *= sci_sign;
+        }
+
+        let mut result: f64 = self.source[start..pos].parse::<f64>().unwrap();
+
+        result *= 10f64.powi(coefficient);
+        
         return Ok((start, Token::RealLiteral(result), pos));
     }
 

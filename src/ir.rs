@@ -76,7 +76,8 @@ pub enum IRItem {
     ConstReal(ValueStorage, f64),
     Start(),
     Label(Label),
-    Function(Label, Function),
+    Function(Label),
+    EndFunction(),
     Param(ValueStorage, u64),
     Local(ValueStorage, u64),
     Jump(Label),
@@ -91,7 +92,7 @@ pub enum IRItem {
     Print(ValueStorage),
     Read(ValueStorage, u64),
     Call(Label, ValueStorage, Vec<ValueStorage>),
-    Return(),
+    Return(ValueStorage),
 }
 
 impl fmt::Display for IRItem {
@@ -107,8 +108,10 @@ impl fmt::Display for IRItem {
                 write!(f, "start()"),
             IRItem::Label(label) =>
                 write!(f, "{}:", label),
-            IRItem::Function(label, _) =>
+            IRItem::Function(label) =>
                 write!(f, "{}:", label),
+            IRItem::EndFunction() =>
+                write!(f, "endfunc()"),
             IRItem::Local(variable, size) =>
                 write!(f, "local({}, {})", variable, size),
             IRItem::Param(variable, size) =>
@@ -135,8 +138,8 @@ impl fmt::Display for IRItem {
                 write!(f, "print({})", label),
             IRItem::Read(label, size) =>
                 write!(f, "read({}, {})", label, size),
-            IRItem::Return() =>
-                write!(f, "return()"),
+            IRItem::Return(label) =>
+                write!(f, "return({})", label),
             IRItem::Call(label, return_label, arguments) =>
                 write!(f,
                        "call({}, {}, [{}])",
@@ -174,6 +177,7 @@ impl<'input> Function {
 #[derive(Clone, Debug)]
 pub struct IRContext {
     pub items: Vec<IRItem>,
+    pub function_map: HashMap<String, Function>,
     var_map: HashMap<ValueStorage, ast::VariableType>,
     variable_label_map: HashMap<String, ValueStorage>,
     pub string_map: HashMap<String, (ValueStorage, u64)>,
@@ -186,6 +190,7 @@ impl IRContext {
     fn new() -> Self {
         return IRContext {
             items: Vec::new(),
+            function_map: HashMap::new(),
             var_map: HashMap::new(),
             variable_label_map: HashMap::new(),
             string_map: HashMap::new(),
@@ -367,13 +372,18 @@ impl<'input> Builder {
     }
 
     #[inline]
-    fn put_return(&self, ir_context: &mut IRContext) {
-        ir_context.items.push(IRItem::Return());
+    fn put_return(&self, ir_context: &mut IRContext, label: ValueStorage) {
+        ir_context.items.push(IRItem::Return(label));
     }
 
     #[inline]
     fn put_call(&self, ir_context: &mut IRContext, label: Label, return_label: ValueStorage, params: Vec<ValueStorage>) {
         ir_context.items.push(IRItem::Call(label, return_label, params));
+    }
+
+    #[inline]
+    fn put_end_function(&self, ir_context: &mut IRContext) {
+        ir_context.items.push(IRItem::EndFunction());
     }
 
     fn generate_function_label_from_signature(&self, symbol_table: &'input symbol_table::SymbolTable<'input>, name: &'input str, arguments: &Vec<ast::VariableType>) -> Label {
@@ -427,15 +437,15 @@ impl<'input> Builder {
 
         function_place_in_items = ir_context.items.len() - 1;
 
-        let return_variable = self.generate_local(&mut function, &ast_function.return_type);
-        self.put_local(ir_context, return_variable, &ast_function.return_type); // no need to put non recycle list
-
         for parameter in &ast_function.parameter_list {
             let parameter_label = self.generate_local(&mut function, &parameter.variable_type);
             self.put_param(ir_context, parameter_label.to_owned(), &parameter.variable_type);
 
             function.variable_label_map.insert(parameter.name.to_string(), parameter_label);
         }
+
+        let return_variable = self.generate_local(&mut function, &ast_function.return_type);
+        self.put_local(ir_context, return_variable, &ast_function.return_type);
 
         for declaration in &ast_function.declaration_list {
             for variable in &declaration.variable_list {
@@ -450,7 +460,10 @@ impl<'input> Builder {
             self.build_statement(ir_context, symbol_table, &mut function, ast_statement);
         }
 
-        *ir_context.items.get_mut(function_place_in_items).unwrap() = IRItem::Function(label_string, function);
+        self.put_end_function(ir_context);
+
+        *ir_context.items.get_mut(function_place_in_items).unwrap() = IRItem::Function(label_string.clone());
+        ir_context.function_map.insert(label_string, function);
     }
 
     fn build_statement(&mut self, ir_context: &mut IRContext, symbol_table: &'input symbol_table::SymbolTable<'input>, function: &mut Function, ast_statement: &'input ast::Statement) {
@@ -482,6 +495,7 @@ impl<'input> Builder {
                 let mut i: usize = 0;
 
                 let space_string_item = ir_context.string_map.get(" ").unwrap().to_owned();
+                let newline_string_item = ir_context.string_map.get("\\n").unwrap().to_owned();
 
                 while i < parameter_list.len() {
                     let parameter = &parameter_list[i];
@@ -499,7 +513,9 @@ impl<'input> Builder {
                         },
                     }
 
-                    if i != parameter_list.len() - 1 {
+                    if i == parameter_list.len() - 1 {
+                        self.put_print(ir_context, newline_string_item.0.to_owned());
+                    } else {
                         self.put_print(ir_context, space_string_item.0.to_owned());
                     }
 
@@ -528,12 +544,14 @@ impl<'input> Builder {
                 let if_expression_label = self.build_expression(ir_context, symbol_table, function, expression);
 
                 let continue_label = self.generate_label(&function.name, 0);
+                let finish_label = self.generate_label(&function.name, 0);
 
                 self.put_bz(ir_context, continue_label.clone(), if_expression_label);
 
                 for statement in if_body {
                     self.build_statement(ir_context, symbol_table, function, statement);
                 }
+                self.put_jump(ir_context, finish_label.clone());
                 self.put_label(ir_context, continue_label);
 
                 if *use_else {
@@ -541,6 +559,7 @@ impl<'input> Builder {
                         self.build_statement(ir_context, symbol_table, function, statement);
                     }
                 }
+                self.put_label(ir_context, finish_label);
             },
             ast::Statement::WhileStatement { expression, body } => {
                 let start_label = self.generate_label(&function.name, 0);
@@ -607,9 +626,7 @@ impl<'input> Builder {
             ast::Statement::ReturnStatement { expression } => {
                 let variable = self.build_expression(ir_context, symbol_table, function, expression);
 
-                self.put_move(ir_context, ValueStorage::Local(0), variable);
-
-                self.put_return(ir_context);
+                self.put_return(ir_context, variable);
             }
         }
     }
@@ -621,9 +638,9 @@ impl<'input> Builder {
                 let mut argument_types = Vec::new();
 
                 for argument_expression in argument_expression_list {
-                    let expression_label = self.build_expression(ir_context, symbol_table, function, argument_expression);
+                    let expression_value_storage = self.build_expression(ir_context, symbol_table, function, argument_expression);
 
-                    arguments.push(expression_label);
+                    arguments.push(expression_value_storage);
                 }
 
                 for argument in &arguments {
@@ -803,13 +820,13 @@ impl<'input> Builder {
         }
 
         // For debugging purposes
-        /* for item in &ir_context.items {
+        for item in &ir_context.items {
             match item {
                 IRItem::Label(_) => println!("{}", item),
-                IRItem::Function(_, _) => println!("{}", item),
+                IRItem::Function(_) => println!("{}", item),
                 _ => println!("    {}", item),
             }
-        } */
+        }
 
         return ir_context;
     }

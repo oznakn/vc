@@ -5,7 +5,7 @@
 #
 #rm -f test.o
 
-riscv64-linux-gnu-as test.s -o test.o && \
+riscv64-linux-gnu-as -march=rv64imac test.s -o test.o && \
   riscv64-linux-gnu-ld test.o -o test.out && \
   rv-sim test.out
 
