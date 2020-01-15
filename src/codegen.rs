@@ -314,7 +314,7 @@ impl<'ir> CodeGenerator<'ir> {
         return format!("{}(sp)", *offset - FULL_WIDTH_SIZE);
     }
 
-    fn value_storage_to_string_for_label(&self, ir_context: &'ir ir::IRContext, s: &'ir ir::ValueStorage) -> String {
+    fn value_storage_to_string_for_label(&self, _ir_context: &'ir ir::IRContext, s: &'ir ir::ValueStorage) -> String {
         return match s {
             ir::ValueStorage::Const(i) => {
                 format!("C{}", i)

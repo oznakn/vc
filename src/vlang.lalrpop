@@ -240,7 +240,7 @@ PrintableList = Comma<Printable>;
 VariableIdentifierList = Comma<VariableIdentifier>;
 
 Printable: ast::Printable<'input> = {
-    <e:Expression> => ast::Printable::Expression(e),
+    <e:LExpression> => ast::Printable::Expression(e),
     <s:"string_literal"> => ast::Printable::String(s),
 };
 
