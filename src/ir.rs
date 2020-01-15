@@ -176,9 +176,9 @@ pub struct IRContext {
     pub items: Vec<IRItem>,
     var_map: HashMap<ValueStorage, ast::VariableType>,
     variable_label_map: HashMap<String, ValueStorage>,
-    string_map: HashMap<String, (ValueStorage, u64)>,
-    int_map: HashMap<String, ValueStorage>,
-    real_map: HashMap<String, ValueStorage>,
+    pub string_map: HashMap<String, (ValueStorage, u64)>,
+    pub int_map: HashMap<String, ValueStorage>,
+    pub real_map: HashMap<String, ValueStorage>,
     const_map: HashMap<ValueStorage, ast::VariableType>,
 }
 

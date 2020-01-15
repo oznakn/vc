@@ -445,8 +445,9 @@ impl<'input> SymbolTable<'input> {
         }
 
         symbol_table.strings.insert(" "); // used in comma separated print
-        symbol_table.ints.insert(1);
-        symbol_table.reals.push(1.0);
+        symbol_table.strings.insert("%d"); // for printf function
+        symbol_table.ints.insert(1); // for by queries
+        symbol_table.reals.push(1.0); // for by queries
         symbol_table.functions.extend(functions);
 
         return Ok(symbol_table);

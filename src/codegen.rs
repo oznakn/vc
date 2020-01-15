@@ -305,6 +305,19 @@ impl<'ir> CodeGenerator<'ir> {
                         self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a7".to_owned(), "x0".to_owned(), "64".to_owned()]));
                         self.items.push(GeneratedCodeItem::Instruction("ecall".to_owned(), vec![]));
                     },
+                    ast::VariableType::Int => {
+                        self.load_value_storage_to_register(ir_context, s, "a1");
+
+                        let formatter_storage = &ir_context.string_map.get("%d").unwrap().0;
+
+                        self.items.push(GeneratedCodeItem::Instruction("lui".to_string(), vec!["a5".to_owned(),
+                                                                                               format!("%hi({})", self.value_storage_to_string(formatter_storage))]));
+
+                        self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["a0".to_owned(), "a5".to_owned(),
+                                                                                                format!("%lo({})", self.value_storage_to_string(formatter_storage))]));
+
+                        self.items.push(GeneratedCodeItem::Instruction("call".to_owned(), vec!["printf".to_string()]));
+                    },
                     _ => {},
                 }
             },
@@ -320,16 +333,23 @@ impl<'ir> CodeGenerator<'ir> {
                 self.load_value_storage_to_register(ir_context, operand1, "t1");
                 self.load_value_storage_to_register(ir_context, operand2, "t2");
 
-                let mut instruction_option = None;
-
                 match op {
-                    ir::Op::Add => instruction_option = Some("add"),
-                    ir::Op::Sub => instruction_option = Some("sub"),
+                    ir::Op::Add => {
+                        self.items.push(GeneratedCodeItem::Instruction("add".to_string(), vec!["t0".to_owned(), "t1".to_owned(), "t2".to_owned()]));
+                    },
+                    ir::Op::Sub => {
+                        self.items.push(GeneratedCodeItem::Instruction("sub".to_string(), vec!["t0".to_owned(), "t1".to_owned(), "t2".to_owned()]));
+                    },
+                    ir::Op::Mul => {
+                        self.items.push(GeneratedCodeItem::Instruction("mul".to_string(), vec!["t0".to_owned(), "t1".to_owned(), "t2".to_owned()]));
+                    },
+                    ir::Op::Div => {
+                        self.items.push(GeneratedCodeItem::Instruction("div".to_string(), vec!["t0".to_owned(), "t1".to_owned(), "t2".to_owned()]));
+                    },
+                    ir::Op::Eq => {
+                        self.items.push(GeneratedCodeItem::Instruction("div".to_string(), vec!["t0".to_owned(), "t1".to_owned(), "t2".to_owned()]));
+                    },
                     _ => {},
-                }
-
-                if let Some(instruction) = instruction_option {
-                    self.items.push(GeneratedCodeItem::Instruction(instruction.to_string(), vec!["t0".to_owned(), "t1".to_owned(), "t2".to_owned()]))
                 }
 
                 self.store_register_to_value_storage(ir_context, storage, "t0");
