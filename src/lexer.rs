@@ -29,12 +29,7 @@ impl<'input> Lexer<'input> {
             next = item;
         }
 
-        Lexer {
-            source,
-            chars,
-            curr,
-            next,
-        }
+        Lexer { source, chars, curr, next }
     }
 
     #[inline]
@@ -107,10 +102,7 @@ impl<'input> Lexer<'input> {
                 self.next_char();
             } else if self.curr_char() == '.' {
                 if dot_seen {
-                    return Err(LexicalError::InvalidChar {
-                        location: self.curr_location(),
-                        ch: self.curr_char(),
-                    });
+                    return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
                 }
 
                 pos += 1;
@@ -120,10 +112,7 @@ impl<'input> Lexer<'input> {
                 self.next_char();
             } else if self.curr_char() == 'E' || self.curr_char() == 'e' {
                 if !dot_seen || e_seen {
-                    return Err(LexicalError::InvalidChar {
-                        location: self.curr_location(),
-                        ch: self.curr_char(),
-                    });
+                    return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
                 }
 
                 e_seen = true;
@@ -133,10 +122,7 @@ impl<'input> Lexer<'input> {
                 self.next_char();
             } else if self.curr_char() == '+' || self.curr_char() == '-' {
                 if !dot_seen || !e_seen || e_sign_seen {
-                    return Err(LexicalError::InvalidChar {
-                        location: self.curr_location(),
-                        ch: self.curr_char(),
-                    });
+                    return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
                 }
 
                 if self.curr_char() == '-' {
@@ -154,7 +140,7 @@ impl<'input> Lexer<'input> {
         }
 
         if is_integer {
-            let result: i64 = self.source[start..pos].parse::<i64>().unwrap();
+            let result = self.source[start..pos].parse::<u64>().unwrap();
 
             return Ok((start, Token::IntLiteral(result), pos));
         }
@@ -162,8 +148,7 @@ impl<'input> Lexer<'input> {
         let mut result: f64 = self.source[start..pos].parse::<f64>().unwrap();
 
         if e_seen {
-            let coefficient =
-                (self.source[sci_start..sci_pos].parse::<u32>().unwrap() as i32) * sci_sign;
+            let coefficient = (self.source[sci_start..sci_pos].parse::<u32>().unwrap() as i32) * sci_sign;
             result *= 10f64.powi(coefficient);
         }
 
@@ -175,10 +160,7 @@ impl<'input> Lexer<'input> {
         let mut pos = start;
 
         if self.curr_char() != '"' {
-            return Err(LexicalError::InvalidChar {
-                location: self.curr_location(),
-                ch: self.curr_char(),
-            });
+            return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
         }
         self.next_char();
 
@@ -186,10 +168,7 @@ impl<'input> Lexer<'input> {
             if self.curr_char() == '"' {
                 break;
             } else if self.is_breaking_whitespace() {
-                return Err(LexicalError::InvalidChar {
-                    location: self.curr_location(),
-                    ch: self.curr_char(),
-                });
+                return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
             } else if self.curr_char() == '\\' {
                 pos += 2;
 
@@ -203,10 +182,7 @@ impl<'input> Lexer<'input> {
         }
 
         if self.curr_char() != '"' {
-            return Err(LexicalError::InvalidChar {
-                location: self.curr_location(),
-                ch: self.curr_char(),
-            });
+            return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
         }
         self.next_char();
 
@@ -218,10 +194,7 @@ impl<'input> Lexer<'input> {
         let mut pos = start;
 
         if !self.curr_char().is_alphabetic() && self.curr_char() != '_' {
-            return Err(LexicalError::InvalidChar {
-                location: self.curr_location(),
-                ch: self.curr_char(),
-            });
+            return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
         }
 
         while self.has_char() {
@@ -249,110 +222,62 @@ impl<'input> Iterator for Lexer<'input> {
                 '{' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::OpenBrace,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::OpenBrace, self.curr_location() + 1)))
                 }
                 '}' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::CloseBrace,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::CloseBrace, self.curr_location() + 1)))
                 }
                 '[' => {
                     self.next_char();
 
-                    return Some(Ok((
-                        self.curr_location(),
-                        Token::OpenBracket,
-                        self.curr_location() + 1,
-                    )));
+                    return Some(Ok((self.curr_location(), Token::OpenBracket, self.curr_location() + 1)));
                 }
                 ']' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::CloseBracket,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::CloseBracket, self.curr_location() + 1)))
                 }
                 '(' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::OpenParen,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::OpenParen, self.curr_location() + 1)))
                 }
                 ')' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::CloseParen,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::CloseParen, self.curr_location() + 1)))
                 }
                 ';' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::Semicolon,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::Semicolon, self.curr_location() + 1)))
                 }
                 ',' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::Comma,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::Comma, self.curr_location() + 1)))
                 }
                 '+' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::Plus,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::Plus, self.curr_location() + 1)))
                 }
                 '-' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::Minus,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::Minus, self.curr_location() + 1)))
                 }
                 '*' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::Star,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::Star, self.curr_location() + 1)))
                 }
                 '/' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::Slash,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::Slash, self.curr_location() + 1)))
                 }
                 ':' => {
                     self.next_char();
@@ -360,27 +285,15 @@ impl<'input> Iterator for Lexer<'input> {
                     if self.curr_char() == '=' {
                         self.next_char();
 
-                        return Some(Ok((
-                            self.curr_location() - 1,
-                            Token::Assign,
-                            self.curr_location() + 1,
-                        )));
+                        return Some(Ok((self.curr_location() - 1, Token::Assign, self.curr_location() + 1)));
                     }
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::Colon,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::Colon, self.curr_location() + 1)))
                 }
                 '=' => {
                     self.next_char();
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::Equal,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::Equal, self.curr_location() + 1)))
                 }
                 '<' => {
                     self.next_char();
@@ -388,28 +301,16 @@ impl<'input> Iterator for Lexer<'input> {
                     if self.curr_char() == '>' {
                         self.next_char();
 
-                        return Some(Ok((
-                            self.curr_location() - 1,
-                            Token::NotEqual,
-                            self.curr_location() + 1,
-                        )));
+                        return Some(Ok((self.curr_location() - 1, Token::NotEqual, self.curr_location() + 1)));
                     }
 
                     if self.curr_char() == '=' {
                         self.next_char();
 
-                        return Some(Ok((
-                            self.curr_location() - 1,
-                            Token::LessEqual,
-                            self.curr_location() + 1,
-                        )));
+                        return Some(Ok((self.curr_location() - 1, Token::LessEqual, self.curr_location() + 1)));
                     }
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::Less,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::Less, self.curr_location() + 1)))
                 }
                 '>' => {
                     self.next_char();
@@ -417,18 +318,10 @@ impl<'input> Iterator for Lexer<'input> {
                     if self.curr_char() == '=' {
                         self.next_char();
 
-                        return Some(Ok((
-                            self.curr_location() - 1,
-                            Token::GreaterEqual,
-                            self.curr_location() + 1,
-                        )));
+                        return Some(Ok((self.curr_location() - 1, Token::GreaterEqual, self.curr_location() + 1)));
                     }
 
-                    Some(Ok((
-                        self.curr_location(),
-                        Token::Greater,
-                        self.curr_location() + 1,
-                    )))
+                    Some(Ok((self.curr_location(), Token::Greater, self.curr_location() + 1)))
                 }
                 '%' => {
                     self.skip_comments();

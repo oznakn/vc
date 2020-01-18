@@ -118,6 +118,49 @@ impl<'input> ParseError<'input> {
 }
 
 #[derive(Clone, Debug)]
+pub enum SymbolTableError<'input> {
+    VariableAlreadyDefinedError { name: &'input str },
+    FunctionAlreadyDefinedError { name: &'input str },
+    VariableNotFoundError { name: &'input str },
+    TypesNotMatchError,
+    FunctionNotFoundError { name: &'input str },
+    WrongNumberOfArguments { name: &'input str },
+    MainFunctionDoesNotExists,
+    MainFunctionReturnTypeMustBeInt,
+}
+
+impl<'input> fmt::Display for SymbolTableError<'input> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return match self {
+            SymbolTableError::VariableAlreadyDefinedError { name } => {
+                write!(f, "Variable `{}` already defined", name.purple())
+            }
+            SymbolTableError::FunctionAlreadyDefinedError { name } => {
+                write!(f, "Function `{}` already defined", name.purple())
+            }
+            SymbolTableError::VariableNotFoundError { name } => {
+                write!(f, "Variable `{}` not found", name.purple())
+            }
+            SymbolTableError::TypesNotMatchError => write!(f, "Wrong type detected"),
+            SymbolTableError::FunctionNotFoundError { name } => {
+                write!(f, "Function `{}` not found", name.purple())
+            }
+            SymbolTableError::WrongNumberOfArguments { name } => write!(
+                f,
+                "Wrong number of arguments when calling function `{}`",
+                name.purple()
+            ),
+            SymbolTableError::MainFunctionDoesNotExists => {
+                write!(f, "Main function does not exists")
+            }
+            SymbolTableError::MainFunctionReturnTypeMustBeInt => {
+                write!(f, "Main function return type must be int")
+            }
+        };
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct CliError {
     pub error: String,
 }

@@ -48,7 +48,7 @@ pub enum Token<'input> {
     Real,
     Identifier(&'input str),
     StringLiteral(&'input str),
-    IntLiteral(i64),
+    IntLiteral(u64),
     RealLiteral(f64),
 }
 

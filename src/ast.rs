@@ -27,7 +27,7 @@ pub enum BinaryOperator {
 #[derive(Clone, Debug)]
 pub struct Program<'input> {
     pub declaration_list: Vec<Declaration<'input>>,
-    pub function_list:  Vec<Function<'input>>,
+    pub function_list: Vec<Function<'input>>,
 }
 
 #[derive(Clone, Debug)]
@@ -36,80 +36,58 @@ pub struct Declaration<'input> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub enum VariableType {
-    String(u64),
+pub enum ValueType {
+    Bool,
     Int,
-    IntVector(u64, bool),
     Real,
-    RealVector(u64, bool),
+    Char,
+    Vector(Box<ValueType>, u64),
+    String,
 }
 
-impl VariableType {
-    pub fn is_fits_to_parameter(&self, parameter: &VariableType) -> bool {
-        return match parameter {
-            VariableType::IntVector { .. } => self.requires_index() && self.plain() == VariableType::Int,
-            VariableType::RealVector { .. } => self.requires_index() && self.plain() == VariableType::Real,
-            VariableType::Real { .. } => true,
-            _ => self.eq(parameter),
-        }
-    }
-
+impl ValueType {
     pub fn requires_index(&self) -> bool {
         return match *self {
-            VariableType::IntVector { .. } => true,
-            VariableType::RealVector { .. } => true,
-            _ => false
+            ValueType::Vector(_, _) => true,
+            _ => false,
         };
     }
 
     pub fn size(&self) -> u64 {
-        return match self {
-            VariableType::Int => 4,
-            VariableType::Real => 8,
-            VariableType::IntVector(size, _) => (*size) * 4,
-            VariableType::RealVector(size, _) => (*size) * 8,
-            VariableType::String(size) => *size,
-        }
+        4
     }
 
     pub fn plain(&self) -> Self {
         return match self {
-            VariableType::IntVector { .. } => VariableType::Int,
-            VariableType::RealVector { .. } => VariableType::Real,
-            _ => self.clone(),
-        }
+            ValueType::Vector(plain_type, _) => plain_type.as_ref().to_owned(),
+            _ => self.to_owned(),
+        };
     }
 }
 
-impl fmt::Display for VariableType {
+impl fmt::Display for ValueType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         return match self {
-            VariableType::Int => write!(f, "int"),
-            VariableType::Real => write!(f, "real"),
-            VariableType::IntVector(size, _) => write!(f, "int_{}", size),
-            VariableType::RealVector(size, _) => write!(f, "real_{}", size),
-            VariableType::String (size)=> write!(f, "string_{}", size),
-        }
+            ValueType::Int => write!(f, "int"),
+            ValueType::Real => write!(f, "real"),
+            ValueType::Vector(value_type, size) => write!(f, "vector_{}_{}", value_type, size),
+            ValueType::String => write!(f, "string"),
+            _ => unimplemented!(),
+        };
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct Variable<'input> {
     pub name: &'input str,
-    pub variable_type: VariableType,
-}
-
-#[derive(Clone, Debug)]
-pub struct Parameter<'input> {
-    pub name: &'input str,
-    pub variable_type: VariableType,
+    pub value_type: ValueType,
 }
 
 #[derive(Clone, Debug)]
 pub struct Function<'input> {
-    pub return_type: VariableType,
+    pub return_type: ValueType,
     pub name: &'input str,
-    pub parameter_list: Vec<Parameter<'input>>,
+    pub parameter_list: Vec<Variable<'input>>,
     pub declaration_list: Vec<Declaration<'input>>,
     pub statement_list: Vec<Statement<'input>>,
 }
@@ -123,22 +101,12 @@ pub struct VariableIdentifier<'input> {
 
 #[derive(Clone, Debug)]
 pub enum Expression<'input> {
-    IntExpression(i64),
+    IntExpression(u64),
     RealExpression(f64),
     VariableExpression(VariableIdentifier<'input>),
-    FunctionCallExpression {
-        name: &'input str,
-        argument_list: Vec<Expression<'input>>,
-    },
-    UnaryExpression {
-        expression: Box<Expression<'input>>,
-        operator: UnaryOperator,
-    },
-    BinaryExpression{
-        left_expression: Box<Expression<'input>>,
-        right_expression: Box<Expression<'input>>,
-        operator: BinaryOperator,
-    },
+    FunctionCallExpression { name: &'input str, argument_list: Vec<Expression<'input>> },
+    UnaryExpression { expression: Box<Expression<'input>>, operator: UnaryOperator },
+    BinaryExpression { left_expression: Box<Expression<'input>>, right_expression: Box<Expression<'input>>, operator: BinaryOperator },
     Empty,
 }
 

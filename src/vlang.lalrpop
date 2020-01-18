@@ -36,36 +36,20 @@ pub VariableList =
     Comma<Variable>;
 
 pub Variable: ast::Variable<'input> =
-    <name:"identifier"> ":" <variable_type:VariableType> => ast::Variable {
+    <name:"identifier"> ":" <value_type:ValueType> => ast::Variable {
         name,
-        variable_type,
+        value_type,
     };
 
-pub VariableType: ast::VariableType = {
-    "int" => ast::VariableType::Int,
-    "real" => ast::VariableType::Real,
-    "int" "[" <n:"int_literal"> "]" => ast::VariableType::IntVector(n as u64, true),
-    "real" "[" <n:"int_literal"> "]" => ast::VariableType::RealVector(n as u64, true),
-};
-
-pub Parameter: ast::Parameter<'input> =
-    <name:"identifier"> ":" <variable_type:ParameterType> => ast::Parameter {
-        name,
-        variable_type,
-    };
-
-
-pub ParameterType: ast::VariableType = {
-    "int" => ast::VariableType::Int,
-    "real" => ast::VariableType::Real,
-    "int" "[" <n:"int_literal"> "]" => ast::VariableType::IntVector(n as u64, true),
-    "int" "[" "]" => ast::VariableType::IntVector(0, false),
-    "real" "[" <n:"int_literal"> "]" => ast::VariableType::RealVector(n as u64, true),
-    "real" "[" "]" => ast::VariableType::RealVector(0, false),
+pub ValueType: ast::ValueType = {
+    "int" => ast::ValueType::Int,
+    "real" => ast::ValueType::Real,
+    "int" "[" <n:"int_literal"> "]" => ast::ValueType::Vector(Box::new(ast::ValueType::Int), n),
+    "real" "[" <n:"int_literal"> "]" => ast::ValueType::Vector(Box::new(ast::ValueType::Real), n),
 };
 
 pub Function: ast::Function<'input> =
-    <return_type:VariableType> "func" <name:"identifier"> "(" <parameter_list:ParameterList> ")" <declaration_list:DeclarationList> <statement_list:StatementList> "endfunc" =>
+    <return_type:ValueType> "func" <name:"identifier"> "(" <parameter_list:VariableList> ")" <declaration_list:DeclarationList> <statement_list:StatementList> "endfunc" =>
         ast::Function {
             return_type,
             name,
@@ -73,8 +57,6 @@ pub Function: ast::Function<'input> =
             declaration_list,
             statement_list,
         };
-
-pub ParameterList = Comma<Parameter>;
 
 pub ExpressionList = Comma<Expression>;
 
@@ -307,7 +289,7 @@ extern {
         "real" => Token::Real,
         "identifier" => Token::Identifier(<&'input str>),
         "string_literal" => Token::StringLiteral(<&'input str>),
-        "int_literal" => Token::IntLiteral(<i64>),
+        "int_literal" => Token::IntLiteral(<u64>),
         "real_literal" => Token::RealLiteral(<f64>),
     }
 }

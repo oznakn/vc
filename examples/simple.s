@@ -174,23 +174,23 @@ _start:
         addi        a7, x0, 93
         ecall       
 main:
-        addi        sp, sp, -28
-        sd          ra, 20(sp)
+        addi        sp, sp, -20
+        sd          ra, 12(sp)
         fld         fa1, C4, a6
         fld         fa2, C5, a6
         fmul.d      ft0, fa1, fa2
         fsd         ft0, 0(sp)
         fld         ft0, 0(sp)
-        fsd         ft0, 8(sp)
-        fld         fa0, 8(sp)
+        fsd         ft0, 4(sp)
+        fld         fa0, 4(sp)
         call        .print_real
         addi        a0, x0, 1
         la          a1, C1
-        addi        a2, x0, 1
+        addi        a2, x0, 4
         addi        a7, x0, 64
         ecall       
         lw          a0, C2
-        ld          ra, 20(sp)
-        addi        sp, sp, 28
+        ld          ra, 12(sp)
+        addi        sp, sp, 20
         ret         
 
