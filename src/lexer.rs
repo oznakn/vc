@@ -1,52 +1,23 @@
-use std::str::CharIndices;
-use std::error::Error;
-use std::fmt;
-use colored::Colorize;
-
+use crate::error::LexicalError;
+use crate::location::Location;
 use crate::tokens::Token;
 
+use std::str::CharIndices;
+
 const EOF: char = '\0';
-
-pub type Location = usize;
-
-#[derive(Debug, PartialEq)]
-pub enum LexicalError {
-    InvalidChar {
-        location: Location,
-        ch: char,
-    },
-    MissingChar {
-        location: Location,
-        ch: char,
-    },
-}
-impl Error for LexicalError {}
-
-impl fmt::Display for LexicalError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return match self {
-            LexicalError::InvalidChar { location, ch, .. } => {
-                write!(f, "Invalid token `{}` at position {}", format!("{}", ch).purple(), format!("{}", location).blue())
-            },
-            LexicalError::MissingChar { location, ch, .. } => {
-                write!(f, "Missing token `{}` at position {}", format!("{}", ch).purple(), format!("{}", location).blue())
-            }
-        };
-    }
-}
 
 pub struct Lexer<'input> {
     source: &'input str,
     chars: CharIndices<'input>,
-    curr:  (Location, char),
-    next:  (Location, char),
+    curr: (Location, char),
+    next: (Location, char),
 }
 
 type LexerItem<'input> = Result<(Location, Token<'input>, Location), LexicalError>;
 
 impl<'input> Lexer<'input> {
-    pub fn new(input: &'input str) -> Self {
-        let mut chars = input.char_indices();
+    pub fn new(source: &'input str) -> Self {
+        let mut chars = source.char_indices();
         let mut curr: (Location, char) = (0, EOF);
         let mut next: (Location, char) = (0, EOF);
 
@@ -58,8 +29,8 @@ impl<'input> Lexer<'input> {
             next = item;
         }
 
-        return Lexer{
-            source: input,
+        Lexer {
+            source,
             chars,
             curr,
             next,
@@ -68,17 +39,17 @@ impl<'input> Lexer<'input> {
 
     #[inline]
     fn curr_location(&self) -> Location {
-        return self.curr.0;
+        self.curr.0
     }
 
     #[inline]
     fn curr_char(&self) -> char {
-        return self.curr.1;
+        self.curr.1
     }
 
     #[inline]
     fn has_char(&self) -> bool {
-        return self.curr.1 != EOF;
+        self.curr.1 != EOF
     }
 
     fn next_char(&mut self) -> char {
@@ -90,12 +61,12 @@ impl<'input> Lexer<'input> {
             self.next = (0, EOF);
         }
 
-        return self.curr.1;
+        self.curr.1
     }
 
     #[inline]
     fn is_breaking_whitespace(&self) -> bool {
-        return self.curr_char() == '\r' || self.curr_char() == '\n';
+        self.curr_char() == '\r' || self.curr_char() == '\n'
     }
 
     fn skip_whitespace(&mut self) {
@@ -142,11 +113,7 @@ impl<'input> Lexer<'input> {
                     });
                 }
 
-                if e_seen {
-                    sci_pos += 1;
-                } else {
-                    pos += 1;
-                }
+                pos += 1;
                 is_integer = false;
                 dot_seen = true;
 
@@ -192,18 +159,15 @@ impl<'input> Lexer<'input> {
             return Ok((start, Token::IntLiteral(result), pos));
         }
 
-        let mut coefficient: i32 = 0;
-
-        if e_seen {
-            coefficient = self.source[sci_start..sci_pos].parse::<u32>().unwrap() as i32;
-            coefficient *= sci_sign;
-        }
-
         let mut result: f64 = self.source[start..pos].parse::<f64>().unwrap();
 
-        result *= 10f64.powi(coefficient);
-        
-        return Ok((start, Token::RealLiteral(result), pos));
+        if e_seen {
+            let coefficient =
+                (self.source[sci_start..sci_pos].parse::<u32>().unwrap() as i32) * sci_sign;
+            result *= 10f64.powi(coefficient);
+        }
+
+        Ok((start, Token::RealLiteral(result), pos))
     }
 
     fn read_string(&mut self) -> LexerItem<'input> {
@@ -211,9 +175,9 @@ impl<'input> Lexer<'input> {
         let mut pos = start;
 
         if self.curr_char() != '"' {
-            return Err(LexicalError::MissingChar {
+            return Err(LexicalError::InvalidChar {
                 location: self.curr_location(),
-                ch: '"'
+                ch: self.curr_char(),
             });
         }
         self.next_char();
@@ -239,14 +203,14 @@ impl<'input> Lexer<'input> {
         }
 
         if self.curr_char() != '"' {
-            return Err(LexicalError::MissingChar {
+            return Err(LexicalError::InvalidChar {
                 location: self.curr_location(),
-                ch: '"',
+                ch: self.curr_char(),
             });
         }
         self.next_char();
 
-        return Ok((start, Token::StringLiteral(&self.source[start..pos]), pos));
+        Ok((start, Token::StringLiteral(&self.source[start..pos]), pos))
     }
 
     fn read_raw_identifier_or_keyword(&mut self) -> LexerItem<'input> {
@@ -270,7 +234,7 @@ impl<'input> Lexer<'input> {
             }
         }
 
-        return Ok((start, Token::Identifier(&self.source[start..pos]), pos));
+        Ok((start, Token::Identifier(&self.source[start..pos]), pos))
     }
 }
 
@@ -285,161 +249,239 @@ impl<'input> Iterator for Lexer<'input> {
                 '{' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::OpenBrace, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::OpenBrace,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '}' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::CloseBrace, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::CloseBrace,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '[' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::OpenBracket, self.curr_location() + 1)));
-                },
+                    return Some(Ok((
+                        self.curr_location(),
+                        Token::OpenBracket,
+                        self.curr_location() + 1,
+                    )));
+                }
                 ']' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::CloseBracket, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::CloseBracket,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '(' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::OpenParen, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::OpenParen,
+                        self.curr_location() + 1,
+                    )))
+                }
                 ')' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::CloseParen, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::CloseParen,
+                        self.curr_location() + 1,
+                    )))
+                }
                 ';' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::Semicolon, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::Semicolon,
+                        self.curr_location() + 1,
+                    )))
+                }
                 ',' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::Comma, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::Comma,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '+' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::Plus, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::Plus,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '-' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::Minus, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::Minus,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '*' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::Star, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::Star,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '/' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::Slash, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::Slash,
+                        self.curr_location() + 1,
+                    )))
+                }
                 ':' => {
                     self.next_char();
 
                     if self.curr_char() == '=' {
                         self.next_char();
 
-                        return Some(Ok((self.curr_location() - 1, Token::Assign, self.curr_location() + 1)));
+                        return Some(Ok((
+                            self.curr_location() - 1,
+                            Token::Assign,
+                            self.curr_location() + 1,
+                        )));
                     }
 
-                    return Some(Ok((self.curr_location(), Token::Colon, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::Colon,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '=' => {
                     self.next_char();
 
-                    return Some(Ok((self.curr_location(), Token::Equal, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::Equal,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '<' => {
                     self.next_char();
 
                     if self.curr_char() == '>' {
                         self.next_char();
 
-                        return Some(Ok((self.curr_location() - 1, Token::NotEqual, self.curr_location() + 1)));
+                        return Some(Ok((
+                            self.curr_location() - 1,
+                            Token::NotEqual,
+                            self.curr_location() + 1,
+                        )));
                     }
 
                     if self.curr_char() == '=' {
                         self.next_char();
 
-                        return Some(Ok((self.curr_location() - 1, Token::LessEqual, self.curr_location() + 1)));
+                        return Some(Ok((
+                            self.curr_location() - 1,
+                            Token::LessEqual,
+                            self.curr_location() + 1,
+                        )));
                     }
 
-                    return Some(Ok((self.curr_location(), Token::Less, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::Less,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '>' => {
                     self.next_char();
 
                     if self.curr_char() == '=' {
                         self.next_char();
 
-                        return Some(Ok((self.curr_location() - 1, Token::GreaterEqual, self.curr_location() + 1)));
+                        return Some(Ok((
+                            self.curr_location() - 1,
+                            Token::GreaterEqual,
+                            self.curr_location() + 1,
+                        )));
                     }
 
-                    return Some(Ok((self.curr_location(), Token::Greater, self.curr_location() + 1)));
-                },
+                    Some(Ok((
+                        self.curr_location(),
+                        Token::Greater,
+                        self.curr_location() + 1,
+                    )))
+                }
                 '%' => {
                     self.skip_comments();
 
-                    return self.next();
-                },
+                    self.next()
+                }
                 c if c.is_numeric() => Some(self.read_number()),
                 c if c == '"' => Some(self.read_string()),
                 _ => {
                     let result = self.read_raw_identifier_or_keyword();
 
                     if result.is_err() {
-                        return Some(Err(result.err().unwrap()));
+                        return Some(result);
                     }
 
                     let (l, token, l2) = result.unwrap();
 
-                    match token {
-                        Token::Identifier(s) => {
-                            return match s {
-                                "var" => Some(Ok((l, Token::Var, l2))),
-                                "func" => Some(Ok((l, Token::Func, l2))),
-                                "endfunc" => Some(Ok((l, Token::EndFunc, l2))),
-                                "return" => Some(Ok((l, Token::Return, l2))),
-                                "to" => Some(Ok((l, Token::To, l2))),
-                                "by" => Some(Ok((l, Token::By, l2))),
-                                "and" => Some(Ok((l, Token::And, l2))),
-                                "mod" => Some(Ok((l, Token::Mod, l2))),
-                                "div" => Some(Ok((l, Token::Div, l2))),
-                                "if" => Some(Ok((l, Token::If, l2))),
-                                "then" => Some(Ok((l, Token::Then, l2))),
-                                "else" => Some(Ok((l, Token::Else, l2))),
-                                "endif" => Some(Ok((l, Token::EndIf, l2))),
-                                "for" => Some(Ok((l, Token::For, l2))),
-                                "endfor" => Some(Ok((l, Token::EndFor, l2))),
-                                "or" => Some(Ok((l, Token::Or, l2))),
-                                "do" => Some(Ok((l, Token::Do, l2))),
-                                "print" => Some(Ok((l, Token::Print, l2))),
-                                "read" => Some(Ok((l, Token::Read, l2))),
-                                "while" => Some(Ok((l, Token::While, l2))),
-                                "endwhile" => Some(Ok((l, Token::EndWhile, l2))),
-                                "not" => Some(Ok((l, Token::Not, l2))),
-                                "int" => Some(Ok((l, Token::Int, l2))),
-                                "real" => Some(Ok((l, Token::Real, l2))),
-                                _ => Some(Ok((l, Token::Identifier(s), l2))),
-                            }
+                    return match token {
+                        Token::Identifier(s) => match s {
+                            "var" => Some(Ok((l, Token::Var, l2))),
+                            "func" => Some(Ok((l, Token::Func, l2))),
+                            "endfunc" => Some(Ok((l, Token::EndFunc, l2))),
+                            "return" => Some(Ok((l, Token::Return, l2))),
+                            "to" => Some(Ok((l, Token::To, l2))),
+                            "by" => Some(Ok((l, Token::By, l2))),
+                            "and" => Some(Ok((l, Token::And, l2))),
+                            "mod" => Some(Ok((l, Token::Mod, l2))),
+                            "div" => Some(Ok((l, Token::Div, l2))),
+                            "if" => Some(Ok((l, Token::If, l2))),
+                            "then" => Some(Ok((l, Token::Then, l2))),
+                            "else" => Some(Ok((l, Token::Else, l2))),
+                            "endif" => Some(Ok((l, Token::EndIf, l2))),
+                            "for" => Some(Ok((l, Token::For, l2))),
+                            "endfor" => Some(Ok((l, Token::EndFor, l2))),
+                            "or" => Some(Ok((l, Token::Or, l2))),
+                            "do" => Some(Ok((l, Token::Do, l2))),
+                            "print" => Some(Ok((l, Token::Print, l2))),
+                            "read" => Some(Ok((l, Token::Read, l2))),
+                            "while" => Some(Ok((l, Token::While, l2))),
+                            "endwhile" => Some(Ok((l, Token::EndWhile, l2))),
+                            "not" => Some(Ok((l, Token::Not, l2))),
+                            "int" => Some(Ok((l, Token::Int, l2))),
+                            "real" => Some(Ok((l, Token::Real, l2))),
+                            _ => Some(Ok((l, Token::Identifier(s), l2))),
                         },
                         _ => {
                             unreachable!();
                         }
-                    }
+                    };
                 }
-            }
+            };
         }
 
-        return None;
+        None
     }
 }

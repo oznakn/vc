@@ -1,8 +1,11 @@
 use lalrpop_util::lalrpop_mod;
 
 pub const MAIN_FUNCTION: &str = "main";
+
 pub mod cli;
 pub mod tokens;
+pub mod location;
+pub mod error;
 pub mod lexer;
 pub mod ast;
 pub mod parser;

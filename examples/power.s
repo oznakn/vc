@@ -9,19 +9,19 @@ C0:
 C1:
         .string     "\n"
 C2:
-        .word       1
-C3:
         .word       10
+C3:
+        .word       1
 C4:
-        .word       4
-C5:
-        .word       8
-C6:
-        .word       0
-C7:
-        .word       3
-C8:
         .word       2
+C5:
+        .word       0
+C6:
+        .word       3
+C7:
+        .word       8
+C8:
+        .word       4
 C9:
         .double     1.0000
 
@@ -182,9 +182,9 @@ _start:
 p:
         addi        sp, sp, -36
         sd          ra, 28(sp)
-        lw          t0, C2
+        lw          t0, C3
         sw          t0, 12(sp)
-        lw          t0, C2
+        lw          t0, C3
         sw          t0, 8(sp)
 p__1:
         lw          t1, 8(sp)
@@ -201,7 +201,7 @@ p__1:
         lw          t0, 0(sp)
         sw          t0, 12(sp)
         lw          t1, 8(sp)
-        lw          t2, C2
+        lw          t2, C3
         addw        t0, t1, t2
         sw          t0, 8(sp)
         j           p__1
@@ -213,9 +213,9 @@ p__2:
 main:
         addi        sp, sp, -32
         sd          ra, 24(sp)
-        lw          a0, C7
+        lw          a0, C6
         sw          a0, -12(sp)
-        lw          a0, C8
+        lw          a0, C4
         sw          a0, -16(sp)
         call        p
         sw          a0, 16(sp)
@@ -226,9 +226,9 @@ main:
         addi        a2, x0, 1
         addi        a7, x0, 64
         ecall       
-        lw          a0, C3
+        lw          a0, C2
         sw          a0, -12(sp)
-        lw          a0, C8
+        lw          a0, C4
         sw          a0, -16(sp)
         call        p
         sw          a0, 12(sp)
@@ -239,9 +239,9 @@ main:
         addi        a2, x0, 1
         addi        a7, x0, 64
         ecall       
-        lw          a0, C7
+        lw          a0, C6
         sw          a0, -12(sp)
-        lw          a0, C4
+        lw          a0, C8
         sw          a0, -16(sp)
         call        p
         sw          a0, 8(sp)
@@ -252,9 +252,9 @@ main:
         addi        a2, x0, 1
         addi        a7, x0, 64
         ecall       
-        lw          a0, C8
+        lw          a0, C4
         sw          a0, -12(sp)
-        lw          a0, C5
+        lw          a0, C7
         sw          a0, -16(sp)
         call        p
         sw          a0, 4(sp)
@@ -265,9 +265,9 @@ main:
         addi        a2, x0, 1
         addi        a7, x0, 64
         ecall       
-        lw          a0, C4
+        lw          a0, C8
         sw          a0, -12(sp)
-        lw          a0, C7
+        lw          a0, C6
         sw          a0, -16(sp)
         call        p
         sw          a0, 0(sp)
@@ -278,7 +278,7 @@ main:
         addi        a2, x0, 1
         addi        a7, x0, 64
         ecall       
-        lw          a0, C6
+        lw          a0, C5
         ld          ra, 24(sp)
         addi        sp, sp, 32
         ret         

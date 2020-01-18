@@ -1,14 +1,10 @@
-use lalrpop_util::ParseError as LParseError;
-
-use crate::lexer;
 use crate::ast;
-use crate::tokens;
+use crate::error::ParseError;
+use crate::lexer;
 use crate::vlang;
 
-pub type ParseError<'input> = LParseError<lexer::Location, tokens::Token<'input>, lexer::LexicalError>;
-
-pub fn parse(s: &str) -> Result<ast::Program, ParseError> {
-    let lexer = lexer::Lexer::new(s);
+pub fn parse<'input>(source: &'input str) -> Result<ast::Program, ParseError<'input>> {
+    let lexer = lexer::Lexer::new(source);
     let parser = vlang::ProgramParser::new();
 
     let program: ast::Program = parser.parse(lexer)?;
@@ -18,8 +14,8 @@ pub fn parse(s: &str) -> Result<ast::Program, ParseError> {
 
 #[cfg(test)]
 mod test {
-    use lalrpop_util::lalrpop_mod;
     use crate::lexer::Lexer;
+    use lalrpop_util::lalrpop_mod;
 
     lalrpop_mod!(pub vlang);
 

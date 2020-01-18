@@ -1,11 +1,10 @@
-#[LALR] grammar<'input>;
+#[LALR]
+grammar<'input>;
 
 use crate::ast;
 use crate::tokens::Token;
-use crate::lexer::{
-    LexicalError,
-    Location,
-};
+use crate::location::Location;
+use crate::error::LexicalError;
 
 #[inline]
 Comma<T>: Vec<T> = {

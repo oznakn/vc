@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::error::Error;
+use colored::Colorize;
 
 use crate::{ast, MAIN_FUNCTION};
-use colored::Colorize;
 
 #[derive(Debug)]
 pub enum SymbolTableError<'input> {
