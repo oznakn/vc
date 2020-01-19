@@ -1,7 +1,7 @@
 # vc, A Compiler for V
 
 [![](https://tokei.rs/b1/github/oznakn/vc)](https://github.com/oznakn/vc)
-[![](https://travis-ci.org/oznakn/vc.svg?branch=master)](https://travis-ci.org/oznakn/vc)
+[![](https://travis-ci.com/oznakn/vc.svg?branch=master)](https://travis-ci.com/oznakn/vc)
 
 A compiler for METU CENG444's programming langauge v, for semester 20191. To see the reference of the language, 
 click [here](https://github.com/bozsahin/ceng444/blob/a72670446051e0b206cd76a8a2ea169301c6bfce/project-material/vspecs-2019.pdf).
