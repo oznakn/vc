@@ -73,10 +73,6 @@ impl ValueType {
         };
     }
 
-    pub fn size(&self) -> u64 {
-        4
-    }
-
     pub fn plain(&self) -> Self {
         return match self {
             ValueType::Vector(plain_type, _) => plain_type.as_ref().to_owned(),

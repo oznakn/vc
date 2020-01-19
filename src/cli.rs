@@ -21,7 +21,9 @@ fn compile_command(matches: &clap::ArgMatches) -> Result<(), CliError> {
         error: format!("File not found: {}", input_file),
     })?;
 
-    let program = parser::parse(&content).map_err(|err| CliError { error: format!("{}", err.to_string(&content)) })?;
+    let program = parser::parse(&content).map_err(|err| CliError {
+        error: format!("{}", err.to_string(&content)),
+    })?;
 
     if matches.is_present("ast") {
         dbg!(&program);

@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -77,19 +78,19 @@ pub enum IRItem {
     Label(Label),
     Function(Label),
     EndFunction(),
-    Param(ValueStorage, u64),
-    Local(ValueStorage, u64),
+    Param(ValueStorage),
+    Local(ValueStorage),
     Jump(Label),
     Move(ValueStorage, ValueStorage),
     Store(VariablePointer, ValueStorage),
     Fetch(ValueStorage, VariablePointer),
     Bz(Label, ValueStorage),
-    Var(ValueStorage, u64),
+    Var(ValueStorage),
     Promote(ValueStorage, ValueStorage),
     BinaryOp(ValueStorage, Op, ValueStorage, ValueStorage),
     UnaryOp(ValueStorage, Op, ValueStorage),
     Print(ValueStorage),
-    Read(ValueStorage, u64),
+    Read(ValueStorage),
     Call(Label, ValueStorage, Vec<ValueStorage>),
     Return(ValueStorage),
 }
@@ -104,21 +105,27 @@ impl fmt::Display for IRItem {
             IRItem::Label(label) => write!(f, "{}:", label),
             IRItem::Function(label) => write!(f, "{}:", label),
             IRItem::EndFunction() => write!(f, "endfunc()"),
-            IRItem::Local(variable, size) => write!(f, "local({}, {})", variable, size),
-            IRItem::Param(variable, size) => write!(f, "param({}, {})", variable, size),
+            IRItem::Local(value_storage) => write!(f, "local({})", value_storage),
+            IRItem::Param(value_storage) => write!(f, "param({})", value_storage),
             IRItem::Jump(label) => write!(f, "jump({})", label),
             IRItem::Move(to, from) => write!(f, "move({}, {})", to, from),
             IRItem::Store(to, from) => write!(f, "store({}[{}], {})", &to.0, &to.1, from),
             IRItem::Fetch(to, from) => write!(f, "store({}[{}], {})", to, &from.0, &from.1),
-            IRItem::Bz(label, variable) => write!(f, "bz({}, {})", label, variable),
-            IRItem::Var(variable, size) => write!(f, "var({}, {})", variable, size),
+            IRItem::Bz(label, value_storage) => write!(f, "bz({}, {})", label, value_storage),
+            IRItem::Var(value_storage) => write!(f, "var({})", value_storage),
             IRItem::Promote(to, from) => write!(f, "promote({}, {})", to, from),
             IRItem::BinaryOp(target, op, operand1, operand2) => write!(f, "binary_op({}, {}, {}, {})", target, op, operand1, operand2),
             IRItem::UnaryOp(target, op, operand) => write!(f, "unary_op({}, {}, {})", target, op, operand),
             IRItem::Print(label) => write!(f, "print({})", label),
-            IRItem::Read(label, size) => write!(f, "read({}, {})", label, size),
+            IRItem::Read(label) => write!(f, "read({})", label),
             IRItem::Return(label) => write!(f, "return({})", label),
-            IRItem::Call(label, return_label, arguments) => write!(f, "call({}, {}, [{}])", label, return_label, arguments.iter().map(|s| format!("{}", s)).collect::<Vec<String>>().join(",")),
+            IRItem::Call(label, return_label, arguments) => write!(
+                f,
+                "call({}, {}, [{}])",
+                label,
+                return_label,
+                arguments.iter().map(|s| format!("{}", s)).collect::<Vec<String>>().join(", ")
+            ),
         }
     }
 }
@@ -127,9 +134,8 @@ impl fmt::Display for IRItem {
 pub struct Function {
     pub name: String,
     pub return_type: ast::ValueType,
-    pub stack_list: Vec<(ValueStorage, ast::ValueType)>,
-    pub stack_map: HashMap<ValueStorage, ast::ValueType>,
-    variable_label_map: HashMap<String, ValueStorage>,
+    pub local_map: IndexMap<ValueStorage, ast::ValueType>,
+    variable_storage_map: HashMap<String, ValueStorage>,
 }
 
 impl<'input> Function {
@@ -137,43 +143,45 @@ impl<'input> Function {
         return Function {
             name: String::from(name),
             return_type: return_type.clone(),
-            stack_list: Vec::new(),
-            stack_map: HashMap::new(),
-            variable_label_map: HashMap::new(),
+            local_map: IndexMap::new(),
+            variable_storage_map: HashMap::new(),
         };
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct IRContext {
-    pub items: Vec<IRItem>,
-    pub function_map: HashMap<String, Function>,
-    var_map: HashMap<ValueStorage, ast::ValueType>,
-    variable_label_map: HashMap<String, ValueStorage>,
-    pub string_map: HashMap<String, (ValueStorage, u64)>,
+    pub const_map: IndexMap<ValueStorage, ast::ValueType>,
+    pub var_map: IndexMap<ValueStorage, ast::ValueType>,
+    pub function_map: IndexMap<String, Function>,
+
+    pub string_map: HashMap<String, ValueStorage>,
     pub int_map: HashMap<String, ValueStorage>,
     pub real_map: HashMap<String, ValueStorage>,
-    const_map: HashMap<ValueStorage, ast::ValueType>,
+
+    variable_storage_map: HashMap<String, ValueStorage>,
+
+    pub items: Vec<IRItem>,
 }
 
 impl IRContext {
     fn new() -> Self {
         return IRContext {
-            items: Vec::new(),
-            function_map: HashMap::new(),
-            var_map: HashMap::new(),
-            variable_label_map: HashMap::new(),
+            const_map: IndexMap::new(),
+            var_map: IndexMap::new(),
+            function_map: IndexMap::new(),
             string_map: HashMap::new(),
             int_map: HashMap::new(),
             real_map: HashMap::new(),
-            const_map: HashMap::new(),
+            variable_storage_map: HashMap::new(),
+            items: Vec::new(),
         };
     }
 }
 
 pub fn fetch_value_type(ir_context: &IRContext, function: &Function, value_storage: &ValueStorage) -> ast::ValueType {
     return match value_storage {
-        ValueStorage::Local(_) => function.stack_map.get(value_storage).unwrap().to_owned(),
+        ValueStorage::Local(_) => function.local_map.get(value_storage).unwrap().to_owned(),
         ValueStorage::Var(_) => ir_context.var_map.get(value_storage).unwrap().to_owned(),
         ValueStorage::Const(_) => ir_context.const_map.get(value_storage).unwrap().to_owned(),
     };
@@ -233,18 +241,18 @@ impl<'input> Builder {
     }
 
     #[inline]
-    fn put_const_string(&mut self, ir_context: &mut IRContext, label: ValueStorage, s: String) {
-        ir_context.items.push(IRItem::ConstString(label, s));
+    fn put_const_string(&mut self, ir_context: &mut IRContext, value_storage: ValueStorage, s: String) {
+        ir_context.items.push(IRItem::ConstString(value_storage, s));
     }
 
     #[inline]
-    fn put_const_int(&mut self, ir_context: &mut IRContext, label: ValueStorage, v: u64) {
-        ir_context.items.push(IRItem::ConstInt(label, v));
+    fn put_const_int(&mut self, ir_context: &mut IRContext, value_storage: ValueStorage, v: u64) {
+        ir_context.items.push(IRItem::ConstInt(value_storage, v));
     }
 
     #[inline]
-    fn put_const_real(&mut self, ir_context: &mut IRContext, label: ValueStorage, v: f64) {
-        ir_context.items.push(IRItem::ConstReal(label, v));
+    fn put_const_real(&mut self, ir_context: &mut IRContext, value_storage: ValueStorage, v: f64) {
+        ir_context.items.push(IRItem::ConstReal(value_storage, v));
     }
 
     fn generate_var(&mut self, ir_context: &mut IRContext, value_type: &'input ast::ValueType) -> ValueStorage {
@@ -254,35 +262,34 @@ impl<'input> Builder {
 
         let value_storage = ValueStorage::Var(index);
 
-        ir_context.var_map.insert(value_storage.to_owned(), value_type.clone());
+        ir_context.var_map.insert(value_storage.to_owned(), value_type.to_owned());
 
         return value_storage;
     }
 
     #[inline]
-    fn put_var(&mut self, ir_context: &mut IRContext, label: ValueStorage, value_type: &'input ast::ValueType) {
-        ir_context.items.push(IRItem::Var(label, value_type.size()));
+    fn put_var(&mut self, ir_context: &mut IRContext, value_storage: ValueStorage) {
+        ir_context.items.push(IRItem::Var(value_storage));
     }
 
     fn generate_local(&mut self, function: &mut Function, value_type: &'input ast::ValueType) -> ValueStorage {
-        let index = function.stack_list.len() as u64;
+        let index = function.local_map.len() as u64;
 
         let value_storage = ValueStorage::Local(index);
 
-        function.stack_list.push((value_storage.to_owned(), value_type.to_owned()));
-        function.stack_map.insert(value_storage.to_owned(), value_type.to_owned());
+        function.local_map.insert(value_storage.to_owned(), value_type.to_owned());
 
         return value_storage;
     }
 
     #[inline]
-    fn put_local(&self, ir_context: &mut IRContext, label: ValueStorage, value_type: &'input ast::ValueType) {
-        ir_context.items.push(IRItem::Local(label, value_type.size()))
+    fn put_local(&self, ir_context: &mut IRContext, value_storage: ValueStorage) {
+        ir_context.items.push(IRItem::Local(value_storage))
     }
 
     #[inline]
-    fn put_param(&self, ir_context: &mut IRContext, label: ValueStorage, value_type: &'input ast::ValueType) {
-        ir_context.items.push(IRItem::Param(label, value_type.size()))
+    fn put_param(&self, ir_context: &mut IRContext, value_storage: ValueStorage) {
+        ir_context.items.push(IRItem::Param(value_storage))
     }
 
     #[inline]
@@ -291,8 +298,8 @@ impl<'input> Builder {
     }
 
     #[inline]
-    fn put_bz(&self, ir_context: &mut IRContext, label: Label, variable: ValueStorage) {
-        ir_context.items.push(IRItem::Bz(label, variable));
+    fn put_bz(&self, ir_context: &mut IRContext, label: Label, value_storage: ValueStorage) {
+        ir_context.items.push(IRItem::Bz(label, value_storage));
     }
 
     #[inline]
@@ -301,13 +308,13 @@ impl<'input> Builder {
     }
 
     #[inline]
-    fn put_print(&self, ir_context: &mut IRContext, label: ValueStorage) {
-        ir_context.items.push(IRItem::Print(label));
+    fn put_print(&self, ir_context: &mut IRContext, value_storage: ValueStorage) {
+        ir_context.items.push(IRItem::Print(value_storage));
     }
 
     #[inline]
-    fn put_read(&self, ir_context: &mut IRContext, label: ValueStorage, size: u64) {
-        ir_context.items.push(IRItem::Read(label, size));
+    fn put_read(&self, ir_context: &mut IRContext, value_storage: ValueStorage) {
+        ir_context.items.push(IRItem::Read(value_storage));
     }
 
     #[inline]
@@ -336,13 +343,13 @@ impl<'input> Builder {
     }
 
     #[inline]
-    fn put_return(&self, ir_context: &mut IRContext, label: ValueStorage) {
-        ir_context.items.push(IRItem::Return(label));
+    fn put_return(&self, ir_context: &mut IRContext, value_storage: ValueStorage) {
+        ir_context.items.push(IRItem::Return(value_storage));
     }
 
     #[inline]
-    fn put_call(&self, ir_context: &mut IRContext, label: Label, return_label: ValueStorage, params: Vec<ValueStorage>) {
-        ir_context.items.push(IRItem::Call(label, return_label, params));
+    fn put_call(&self, ir_context: &mut IRContext, label: Label, return_value_storage: ValueStorage, params: Vec<ValueStorage>) {
+        ir_context.items.push(IRItem::Call(label, return_value_storage, params));
     }
 
     #[inline]
@@ -353,10 +360,10 @@ impl<'input> Builder {
     fn fetch_variable(&mut self, ir_context: &mut IRContext, function: &mut Function, variable: &str) -> Option<(ValueStorage, ast::ValueType)> {
         let mut value_storage_option = None;
 
-        if let Some(_value_storage) = function.variable_label_map.get(variable) {
-            value_storage_option = Some(_value_storage.to_owned());
-        } else if let Some(_value_storage) = ir_context.variable_label_map.get(variable) {
-            value_storage_option = Some(_value_storage.to_owned());
+        if let Some(value_storage) = function.variable_storage_map.get(variable) {
+            value_storage_option = Some(value_storage.to_owned());
+        } else if let Some(value_storage) = ir_context.variable_storage_map.get(variable) {
+            value_storage_option = Some(value_storage.to_owned());
         }
 
         if let Some(value_storage) = value_storage_option {
@@ -383,20 +390,20 @@ impl<'input> Builder {
 
         for parameter in &ast_function.parameter_list {
             let parameter_label = self.generate_local(&mut function, &parameter.value_type);
-            self.put_param(ir_context, parameter_label.to_owned(), &parameter.value_type);
+            self.put_param(ir_context, parameter_label.to_owned());
 
-            function.variable_label_map.insert(parameter.name.to_string(), parameter_label);
+            function.variable_storage_map.insert(parameter.name.to_string(), parameter_label);
         }
 
         let return_variable = self.generate_local(&mut function, &ast_function.return_type);
-        self.put_local(ir_context, return_variable, &ast_function.return_type);
+        self.put_local(ir_context, return_variable);
 
         for declaration in &ast_function.declaration_list {
             for variable in &declaration.variable_list {
                 let label = self.generate_local(&mut function, &variable.value_type);
-                self.put_local(ir_context, label.to_owned(), &variable.value_type);
+                self.put_local(ir_context, label.to_owned());
 
-                function.variable_label_map.insert(String::from(variable.name), label);
+                function.variable_storage_map.insert(String::from(variable.name), label);
             }
         }
 
@@ -420,7 +427,7 @@ impl<'input> Builder {
 
                 if value_type.plain() == ast::ValueType::Real && result_type == ast::ValueType::Int {
                     let temp = self.generate_local(function, &ast::ValueType::Real);
-                    self.put_local(ir_context, temp.to_owned(), &ast::ValueType::Real);
+                    self.put_local(ir_context, temp.to_owned());
 
                     self.put_promote(ir_context, temp.to_owned(), result);
 
@@ -453,14 +460,14 @@ impl<'input> Builder {
                         ast::Printable::String(s) => {
                             let string_item = ir_context.string_map.get(*s).unwrap().to_owned();
 
-                            self.put_print(ir_context, string_item.0);
+                            self.put_print(ir_context, string_item);
                         }
                     }
 
                     if i == parameter_list.len() - 1 {
-                        self.put_print(ir_context, newline_string_item.0.to_owned());
+                        self.put_print(ir_context, newline_string_item.to_owned());
                     } else {
-                        self.put_print(ir_context, space_string_item.0.to_owned());
+                        self.put_print(ir_context, space_string_item.to_owned());
                     }
 
                     i += 1;
@@ -471,20 +478,25 @@ impl<'input> Builder {
                     let (variable_label, value_type) = self.fetch_variable(ir_context, function, parameter.name).unwrap();
 
                     if !value_type.requires_index() {
-                        self.put_read(ir_context, variable_label, value_type.plain().size());
+                        self.put_read(ir_context, variable_label);
                     } else {
                         let index_expression = self.build_expression(ir_context, symbol_table, function, &parameter.expression);
 
                         let temp = self.generate_local(function, &value_type.plain());
-                        self.put_local(ir_context, temp.to_owned(), &value_type.plain());
+                        self.put_local(ir_context, temp.to_owned());
 
-                        self.put_read(ir_context, temp.to_owned(), value_type.plain().size());
+                        self.put_read(ir_context, temp.to_owned());
 
                         self.put_store(ir_context, (variable_label, index_expression), temp);
                     }
                 }
             }
-            ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
+            ast::Statement::IfStatement {
+                expression,
+                if_body,
+                else_body,
+                use_else,
+            } => {
                 let if_expression_label = self.build_expression(ir_context, symbol_table, function, expression);
 
                 let finish_label = self.generate_label(&function.name, 0);
@@ -556,7 +568,7 @@ impl<'input> Builder {
                 }
 
                 let check_variable_value_storage = self.generate_local(function, &init_variable_context.1);
-                self.put_local(ir_context, check_variable_value_storage.clone(), &init_variable_context.1);
+                self.put_local(ir_context, check_variable_value_storage.clone());
 
                 self.put_label(ir_context, start_label.clone());
 
@@ -579,9 +591,18 @@ impl<'input> Builder {
         }
     }
 
-    fn build_expression(&mut self, ir_context: &mut IRContext, symbol_table: &'input symbol_table::SymbolTable<'input>, function: &mut Function, ast_expression: &'input ast::Expression<'input>) -> ValueStorage {
+    fn build_expression(
+        &mut self,
+        ir_context: &mut IRContext,
+        symbol_table: &'input symbol_table::SymbolTable<'input>,
+        function: &mut Function,
+        ast_expression: &'input ast::Expression<'input>,
+    ) -> ValueStorage {
         match ast_expression {
-            ast::Expression::FunctionCallExpression { name, argument_list: argument_expression_list } => {
+            ast::Expression::FunctionCallExpression {
+                name,
+                argument_list: argument_expression_list,
+            } => {
                 let mut arguments = Vec::new();
                 let mut argument_types = Vec::new();
 
@@ -597,7 +618,7 @@ impl<'input> Builder {
 
                 let return_type = symbol_table.functions.get(*name).unwrap().return_type;
                 let result_label = self.generate_local(function, &return_type);
-                self.put_local(ir_context, result_label.to_owned(), &return_type);
+                self.put_local(ir_context, result_label.to_owned());
 
                 self.put_call(ir_context, name.to_string(), result_label.to_owned(), arguments.clone());
 
@@ -614,13 +635,17 @@ impl<'input> Builder {
 
                 let label_type = value_type.plain();
                 let label = self.generate_local(function, &label_type);
-                self.put_local(ir_context, label.to_owned(), &label_type);
+                self.put_local(ir_context, label.to_owned());
 
                 self.put_fetch(ir_context, label.to_owned(), (variable_label, index_expression.to_owned()));
 
                 return label;
             }
-            ast::Expression::BinaryExpression { left_expression, operator, right_expression } => {
+            ast::Expression::BinaryExpression {
+                left_expression,
+                operator,
+                right_expression,
+            } => {
                 let mut operand1 = self.build_expression(ir_context, symbol_table, function, left_expression);
                 let mut operand2 = self.build_expression(ir_context, symbol_table, function, right_expression);
 
@@ -646,7 +671,7 @@ impl<'input> Builder {
 
                 if operand1_type == ast::ValueType::Int && operand2_type == ast::ValueType::Real {
                     let temp = self.generate_local(function, &ast::ValueType::Real);
-                    self.put_local(ir_context, temp.to_owned(), &ast::ValueType::Real);
+                    self.put_local(ir_context, temp.to_owned());
 
                     self.put_promote(ir_context, temp.to_owned(), operand1.to_owned());
 
@@ -654,7 +679,7 @@ impl<'input> Builder {
                     result_type = ast::ValueType::Real;
                 } else if operand1_type == ast::ValueType::Real && operand2_type == ast::ValueType::Int {
                     let temp = self.generate_local(function, &ast::ValueType::Real);
-                    self.put_local(ir_context, temp.to_owned(), &ast::ValueType::Real);
+                    self.put_local(ir_context, temp.to_owned());
 
                     self.put_promote(ir_context, temp.to_owned(), operand2.to_owned());
 
@@ -663,7 +688,7 @@ impl<'input> Builder {
                 }
 
                 let result_local = self.generate_local(function, &result_type);
-                self.put_local(ir_context, result_local.to_owned(), &result_type);
+                self.put_local(ir_context, result_local.to_owned());
 
                 let op = match operator {
                     ast::BinaryOperator::Addition => Op::Add,
@@ -692,7 +717,7 @@ impl<'input> Builder {
                 let value_type = self.fetch_value_type(ir_context, function, &operand);
 
                 let result_local = self.generate_local(function, &value_type);
-                self.put_local(ir_context, result_local.to_owned(), &value_type);
+                self.put_local(ir_context, result_local.to_owned());
 
                 let op = match operator {
                     ast::UnaryOperator::Negative => Op::Negative,
@@ -718,9 +743,9 @@ impl<'input> Builder {
             let value_type = variable.value_type.clone();
 
             let label = self.generate_var(ir_context, &value_type);
-            self.put_var(ir_context, label.to_owned(), &value_type);
+            self.put_var(ir_context, label.to_owned());
 
-            ir_context.variable_label_map.insert(String::from(variable.name), label);
+            ir_context.variable_storage_map.insert(String::from(variable.name), label);
         }
     }
 
@@ -729,9 +754,7 @@ impl<'input> Builder {
             let label = self.generate_const(ir_context);
             self.put_const_string(ir_context, label.to_owned(), (*s).to_owned());
 
-            let size = s.to_string().clone().replace("\\n", " ").replace("\\r", " ").replace("\\\"", " ").len() as u64;
-
-            ir_context.string_map.insert((*s).to_owned(), (label.clone(), size));
+            ir_context.string_map.insert((*s).to_owned(), label.clone());
             ir_context.const_map.insert(label, ast::ValueType::String);
         }
 

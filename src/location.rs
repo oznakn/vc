@@ -43,7 +43,10 @@ impl<'input> Lines {
         if *pos <= self.end {
             let line_index = self.line_number_at_byte(*pos);
 
-            self.line(line_index).map(|line_byte| LocationWithLineColumn { line: line_index, column: pos - line_byte })
+            self.line(line_index).map(|line_byte| LocationWithLineColumn {
+                line: line_index,
+                column: pos - line_byte,
+            })
         } else {
             None
         }

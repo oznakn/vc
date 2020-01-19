@@ -1,14 +1,14 @@
+use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
 use crate::error::SymbolTableError;
-
 use crate::{ast, MAIN_FUNCTION};
 
 #[derive(Clone, Debug)]
 pub struct Function<'input> {
     pub name: &'input str,
     pub return_type: &'input ast::ValueType,
-    pub parameter_list: Vec<(&'input str, &'input ast::ValueType)>,
+    pub parameters: IndexMap<&'input str, &'input ast::ValueType>,
     pub variables: HashMap<&'input str, &'input ast::ValueType>,
 }
 
@@ -17,7 +17,7 @@ impl<'input> Function<'input> {
         return Function {
             name,
             return_type,
-            parameter_list: Vec::new(),
+            parameters: IndexMap::new(),
             variables: HashMap::new(),
         };
     }
@@ -51,18 +51,7 @@ impl<'input> SymbolTable<'input> {
     fn check_variable_not_exists(&self, name: &'input str) -> Result<bool, SymbolTableError<'input>> {
         let current_function = self.functions.get(self.current_function.unwrap()).unwrap();
 
-        let mut found = false;
-
-        for (p_name, _) in &current_function.parameter_list {
-            if (*p_name).eq(name) {
-                found = true;
-                break;
-            }
-        }
-
-        found = found || current_function.variables.contains_key(name) || self.variables.contains_key(name);
-
-        if found {
+        if current_function.parameters.contains_key(name) || current_function.variables.contains_key(name) || self.variables.contains_key(name) {
             return Err(SymbolTableError::VariableAlreadyDefinedError { name });
         }
 
@@ -77,8 +66,8 @@ impl<'input> SymbolTable<'input> {
             return Ok((*v).clone());
         }
 
-        for (_, p_type) in &current_function.parameter_list {
-            return Ok((*p_type).clone());
+        if let Some(v) = current_function.parameters.get(variable_identifier.name) {
+            return Ok((*v).clone());
         }
 
         if let Some(v) = self.variables.get(variable_identifier.name) {
@@ -106,7 +95,7 @@ impl<'input> SymbolTable<'input> {
     fn insert_parameter_to_current_function(&mut self, name: &'input str, parameter_type: &'input ast::ValueType) {
         let current_function = self.functions.get_mut(self.current_function.unwrap()).unwrap();
 
-        current_function.parameter_list.push((name, parameter_type));
+        current_function.parameters.insert(name, parameter_type);
     }
 
     fn insert_variable_to_current_function(&mut self, name: &'input str, parameter_type: &'input ast::ValueType) {
@@ -154,7 +143,12 @@ impl<'input> SymbolTable<'input> {
                     }
                 }
             }
-            ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
+            ast::Statement::IfStatement {
+                expression,
+                if_body,
+                else_body,
+                use_else,
+            } => {
                 let if_expression_value_type = self.check_expression(expression)?;
 
                 if !if_expression_value_type.is_represents_bool() {
@@ -245,14 +239,14 @@ impl<'input> SymbolTable<'input> {
                 }
 
                 let call_function = self.functions.get(*name).unwrap();
-                if call_function.parameter_list.len() != argument_types.len() {
+                if call_function.parameters.len() != argument_types.len() {
                     return Err(SymbolTableError::WrongNumberOfArguments { name: call_function.name });
                 }
 
                 let mut i = 0;
-                while i < call_function.parameter_list.len() {
+
+                for parameter in &call_function.parameters {
                     let argument = argument_types.get(i).unwrap();
-                    let parameter = call_function.parameter_list.get(i).unwrap();
 
                     if !argument.eq(parameter.1) {
                         return Err(SymbolTableError::TypesNotMatchError);
@@ -270,7 +264,11 @@ impl<'input> SymbolTable<'input> {
 
                 Ok(self.check_value_type_matches(variable_identifier)?.to_owned())
             }
-            ast::Expression::BinaryExpression { left_expression, operator, right_expression } => {
+            ast::Expression::BinaryExpression {
+                left_expression,
+                operator,
+                right_expression,
+            } => {
                 let operand1_type = self.check_expression(left_expression)?;
                 let operand2_type = self.check_expression(right_expression)?;
 
