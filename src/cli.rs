@@ -35,7 +35,7 @@ fn compile_command(matches: &clap::ArgMatches) -> Result<(), CliError> {
         dbg!(&table);
     }
 
-    let ir_context = ir::Builder::build(&program, &table);
+    let ir_context = ir::IRContext::build(&program, &table);
 
     if matches.is_present("ir") {
         for item in &ir_context.items {

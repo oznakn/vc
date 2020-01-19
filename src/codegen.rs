@@ -156,11 +156,11 @@ const PRINT_REAL_CODE: &str = "
         ret
 ";
 
-fn value_storage_to_size(value_storage: &ValueStorage) -> usize {
+fn value_storage_to_size(_value_storage: &ValueStorage) -> usize {
     4
 }
 
-fn value_type_to_size(value_storage: &ast::ValueType) -> usize {
+fn value_type_to_size(_value_storage: &ast::ValueType) -> usize {
     4
 }
 
@@ -211,16 +211,16 @@ pub fn convert_to_string(items: &Vec<GeneratedCodeItem>) -> String {
 }
 
 #[derive(Clone, Debug)]
-pub struct CodeGenerator<'ir> {
+pub struct CodeGenerator<'input, 'ir> {
     is_ro_data_section_started: bool,
     is_data_section_started: bool,
     is_text_section_started: bool,
-    current_function: Option<&'ir ir::Function>,
+    current_function: Option<&'ir ir::Function<'input>>,
     function_stack_offset_map: HashMap<String, (usize, HashMap<ir::ValueStorage, usize>)>,
     items: Vec<GeneratedCodeItem>,
 }
 
-impl<'ir> CodeGenerator<'ir> {
+impl<'input, 'ir> CodeGenerator<'input, 'ir> {
     fn new() -> Self {
         return CodeGenerator {
             is_ro_data_section_started: false,
@@ -305,17 +305,17 @@ impl<'ir> CodeGenerator<'ir> {
 
     #[inline]
     fn get_stack_offset_map(&self) -> &HashMap<ir::ValueStorage, usize> {
-        return &self.function_stack_offset_map.get(&self.current_function.unwrap().name).unwrap().1;
+        return &self.function_stack_offset_map.get(self.current_function.unwrap().name).unwrap().1;
     }
 
     #[inline]
     fn get_jump_address(&self) -> String {
-        let offset = &self.function_stack_offset_map.get(&self.current_function.unwrap().name).unwrap().0;
+        let offset = &self.function_stack_offset_map.get(self.current_function.unwrap().name).unwrap().0;
 
         return format!("{}(sp)", *offset - FULL_WIDTH_SIZE);
     }
 
-    fn value_storage_to_string_for_label(&self, _ir_context: &'ir ir::IRContext, s: &'ir ir::ValueStorage) -> String {
+    fn value_storage_to_string_for_label(&self, _ir_context: &'ir ir::IRContext<'input>, s: &'ir ir::ValueStorage) -> String {
         return match s {
             ir::ValueStorage::Const(i) => format!("C{}", i),
             ir::ValueStorage::Var(i) => format!("V{}", i),
@@ -323,7 +323,7 @@ impl<'ir> CodeGenerator<'ir> {
         };
     }
 
-    fn value_storage_to_string(&self, ir_context: &'ir ir::IRContext, s: &'ir ir::ValueStorage, write_data: bool) -> String {
+    fn value_storage_to_string(&self, ir_context: &'ir ir::IRContext<'input>, s: &'ir ir::ValueStorage, write_data: bool) -> String {
         let f = self.current_function.unwrap();
 
         let value_type = fetch_value_type(ir_context, f, s);
@@ -359,7 +359,7 @@ impl<'ir> CodeGenerator<'ir> {
         };
     }
 
-    fn load_value_storage_address_to_register(&mut self, ir_context: &'ir ir::IRContext, storage: &'ir ir::ValueStorage, register: &str) {
+    fn load_value_storage_address_to_register(&mut self, ir_context: &'ir ir::IRContext<'input>, storage: &'ir ir::ValueStorage, register: &str) {
         let value_type = fetch_value_type(ir_context, self.current_function.unwrap(), storage);
 
         let mut instruction_option = None;
@@ -377,7 +377,7 @@ impl<'ir> CodeGenerator<'ir> {
         }
     }
 
-    fn load_value_storage_to_register(&mut self, ir_context: &'ir ir::IRContext, storage: &'ir ir::ValueStorage, register: &str) {
+    fn load_value_storage_to_register(&mut self, ir_context: &'ir ir::IRContext<'input>, storage: &'ir ir::ValueStorage, register: &str) {
         let value_type = fetch_value_type(ir_context, self.current_function.unwrap(), storage);
 
         let mut instruction_option = None;
@@ -396,7 +396,7 @@ impl<'ir> CodeGenerator<'ir> {
         }
     }
 
-    fn store_register_to_value_storage(&mut self, ir_context: &'ir ir::IRContext, storage: &'ir ir::ValueStorage, register: &str) {
+    fn store_register_to_value_storage(&mut self, ir_context: &'ir ir::IRContext<'input>, storage: &'ir ir::ValueStorage, register: &str) {
         let value_type = fetch_value_type(ir_context, self.current_function.unwrap(), storage);
 
         let mut instruction_option = None;
@@ -415,7 +415,7 @@ impl<'ir> CodeGenerator<'ir> {
         }
     }
 
-    fn copy_to_call_function(&mut self, ir_context: &'ir ir::IRContext, call_function: &'ir ir::Function, from: &'ir ir::ValueStorage, to: &'ir ir::ValueStorage) {
+    fn copy_to_call_function(&mut self, ir_context: &'ir ir::IRContext<'input>, call_function: &'ir ir::Function, from: &'ir ir::ValueStorage, to: &'ir ir::ValueStorage) {
         // PART 1
         let value_type = fetch_value_type(ir_context, self.current_function.unwrap(), from);
 
@@ -432,7 +432,7 @@ impl<'ir> CodeGenerator<'ir> {
             _ => {}
         }
 
-        let (offset, stack_offset_map) = self.function_stack_offset_map.get(&call_function.name).unwrap();
+        let (offset, stack_offset_map) = self.function_stack_offset_map.get(call_function.name).unwrap();
         let variable_offset = -(*offset as i64) + (*stack_offset_map.get(to).unwrap() as i64);
 
         match value_type {
@@ -447,7 +447,7 @@ impl<'ir> CodeGenerator<'ir> {
         }
     }
 
-    fn visit(&mut self, ir_context: &'ir ir::IRContext, ir_item: &'ir ir::IRItem) {
+    fn visit(&mut self, ir_context: &'ir ir::IRContext<'input>, ir_item: &'ir ir::IRItem<'input>) {
         match ir_item {
             ir::IRItem::ConstString(value_storage, s) => {
                 self.check_ro_data_section();
@@ -496,11 +496,11 @@ impl<'ir> CodeGenerator<'ir> {
 
                 let f = ir_context.function_map.get(label).unwrap();
 
-                let (offset, _) = &self.function_stack_offset_map.get(&f.name).unwrap();
+                let (offset, _) = &self.function_stack_offset_map.get(f.name).unwrap();
 
                 self.current_function = Some(f);
 
-                self.items.push(GeneratedCodeItem::Label(label.to_owned()));
+                self.items.push(GeneratedCodeItem::Label(label.to_string()));
                 self.items
                     .push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["sp".to_owned(), "sp".to_owned(), format!("-{}", offset)]));
                 self.items.push(GeneratedCodeItem::Instruction("sd".to_string(), vec!["ra".to_owned(), self.get_jump_address()]));
@@ -508,7 +508,7 @@ impl<'ir> CodeGenerator<'ir> {
             ir::IRItem::Return(s) => {
                 let f = self.current_function.unwrap();
 
-                let offset = self.function_stack_offset_map.get(&f.name).unwrap().0;
+                let offset = self.function_stack_offset_map.get(f.name).unwrap().0;
 
                 let value_type = fetch_value_type(ir_context, f, s);
 
@@ -808,7 +808,7 @@ impl<'ir> CodeGenerator<'ir> {
                     i += 1;
                 }
 
-                self.items.push(GeneratedCodeItem::Instruction("call".to_string(), vec![label.to_owned()]));
+                self.items.push(GeneratedCodeItem::Instruction("call".to_string(), vec![label.to_string()]));
 
                 match call_function.return_type {
                     ast::ValueType::Int => {

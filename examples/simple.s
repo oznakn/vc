@@ -5,9 +5,9 @@
 __F10:
         .double     10.0000
 C0:
-        .string     "\n"
-C1:
         .string     " "
+C1:
+        .string     "\n"
 C2:
         .word       0
 C3:
@@ -185,7 +185,7 @@ main:
         fld         fa0, 4(sp)
         call        .print_real
         addi        a0, x0, 1
-        la          a1, C0
+        la          a1, C1
         addi        a2, x0, 4
         addi        a7, x0, 64
         ecall       

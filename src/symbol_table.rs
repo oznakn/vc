@@ -1,4 +1,4 @@
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use std::collections::{HashMap, HashSet};
 
 use crate::error::SymbolTableError;
@@ -25,9 +25,9 @@ impl<'input> Function<'input> {
 
 #[derive(Clone, Debug)]
 pub struct SymbolTable<'input> {
-    pub ints: HashSet<u64>,
-    pub reals: Vec<f64>,
-    pub strings: HashSet<&'input str>,
+    pub ints: IndexMap<String, u64>,
+    pub reals: IndexMap<String, f64>,
+    pub strings: IndexSet<&'input str>,
     pub functions: HashMap<&'input str, Function<'input>>,
     pub variables: HashMap<&'input str, &'input ast::ValueType>,
     current_function: Option<&'input str>,
@@ -37,9 +37,9 @@ pub struct SymbolTable<'input> {
 impl<'input> SymbolTable<'input> {
     pub fn new() -> Self {
         return SymbolTable {
-            ints: HashSet::new(),
-            reals: Vec::new(),
-            strings: HashSet::new(),
+            ints: IndexMap::new(),
+            reals: IndexMap::new(),
+            strings: IndexSet::new(),
             functions: HashMap::new(),
             variables: HashMap::new(),
             current_function: None,
@@ -292,12 +292,12 @@ impl<'input> SymbolTable<'input> {
             }
             ast::Expression::UnaryExpression { expression, operator: _ } => Ok(self.check_expression(expression)?.to_owned()),
             ast::Expression::IntExpression(value) => {
-                self.ints.insert(*value);
+                self.ints.insert(format!("{}", value), *value);
 
                 Ok(ast::ValueType::Int)
             }
             ast::Expression::RealExpression(value) => {
-                self.reals.push(*value);
+                self.reals.insert(format!("{}", value), *value);
 
                 Ok(ast::ValueType::Real)
             }
@@ -365,8 +365,8 @@ impl<'input> SymbolTable<'input> {
 
         symbol_table.strings.insert(" "); // used in comma separated print
         symbol_table.strings.insert("\\n"); // used in print
-        symbol_table.ints.insert(1); // for by queries
-        symbol_table.reals.push(1.0); // for by queries
+        symbol_table.ints.insert("1".to_owned(), 1); // for by queries
+        symbol_table.reals.insert("1.0".to_owned(), 1.0); // for by queries
 
         return Ok(symbol_table);
     }
