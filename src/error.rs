@@ -19,35 +19,19 @@ impl<'input> From<LexicalError> for LParseError<Location, Token<'input>, Lexical
 
 #[derive(Clone, Debug)]
 pub enum ParseError<'input> {
-    InvalidToken {
-        location: Location,
-    },
-    UnrecognizedEOF {
-        location: Location,
-        expected: Vec<String>,
-    },
-    UnrecognizedToken {
-        token: (Location, Token<'input>, Location),
-        expected: Vec<String>,
-    },
-    ExtraToken {
-        token: (Location, Token<'input>, Location),
-    },
-    User {
-        error: LexicalError,
-    },
+    InvalidToken { location: Location },
+    UnrecognizedEOF { location: Location, expected: Vec<String> },
+    UnrecognizedToken { token: (Location, Token<'input>, Location), expected: Vec<String> },
+    ExtraToken { token: (Location, Token<'input>, Location) },
+    User { error: LexicalError },
 }
 
 impl<'input> From<LParseError<Location, Token<'input>, LexicalError>> for ParseError<'input> {
     fn from(err: LParseError<Location, Token<'input>, LexicalError>) -> Self {
         match err {
             LParseError::InvalidToken { location } => ParseError::InvalidToken { location },
-            LParseError::UnrecognizedEOF { location, expected } => {
-                ParseError::UnrecognizedEOF { location, expected }
-            }
-            LParseError::UnrecognizedToken { token, expected } => {
-                ParseError::UnrecognizedToken { token, expected }
-            }
+            LParseError::UnrecognizedEOF { location, expected } => ParseError::UnrecognizedEOF { location, expected },
+            LParseError::UnrecognizedToken { token, expected } => ParseError::UnrecognizedToken { token, expected },
             LParseError::ExtraToken { token } => ParseError::ExtraToken { token },
             LParseError::User { error } => ParseError::User { error },
         }
@@ -67,50 +51,28 @@ impl<'input> ParseError<'input> {
             ParseError::UnrecognizedEOF { location, expected } => {
                 let location_with_line_column = lines.location_with_line_column(location).unwrap();
 
-                format!(
-                    "Unrecognized EOF at position {}, expected one of: [{}]",
-                    location_with_line_column,
-                    expected.join(", ").purple(),
-                )
+                format!("Unrecognized EOF at position {}, expected one of: [{}]", location_with_line_column, expected.join(", ").purple(),)
             }
             ParseError::UnrecognizedToken { token, expected } => {
                 let location_with_line_column = lines.location_with_line_column(&token.0).unwrap();
 
-                format!(
-                    "Unrecognized token at position {}, expected one of: [{}]",
-                    location_with_line_column,
-                    expected.join(", ").purple(),
-                )
+                format!("Unrecognized token at position {}, expected one of: [{}]", location_with_line_column, expected.join(", ").purple(),)
             }
             ParseError::ExtraToken { token } => {
                 let location_with_line_column = lines.location_with_line_column(&token.0).unwrap();
 
-                format!(
-                    "Extra token `{}` at position {}",
-                    format!("{}", token.1).purple(),
-                    location_with_line_column
-                )
+                format!("Extra token `{}` at position {}", format!("{}", token.1).purple(), location_with_line_column)
             }
             ParseError::User { error } => match error {
                 LexicalError::InvalidChar { location, ch } => {
-                    let location_with_line_column =
-                        lines.location_with_line_column(location).unwrap();
+                    let location_with_line_column = lines.location_with_line_column(location).unwrap();
 
-                    format!(
-                        "Invalid char `{}` at position {}",
-                        format!("{}", ch).purple(),
-                        location_with_line_column
-                    )
+                    format!("Invalid char `{}` at position {}", format!("{}", ch).purple(), location_with_line_column)
                 }
                 LexicalError::MissingChar { location, ch } => {
-                    let location_with_line_column =
-                        lines.location_with_line_column(location).unwrap();
+                    let location_with_line_column = lines.location_with_line_column(location).unwrap();
 
-                    format!(
-                        "Missing char `{}` at position {}",
-                        format!("{}", ch).purple(),
-                        location_with_line_column
-                    )
+                    format!("Missing char `{}` at position {}", format!("{}", ch).purple(), location_with_line_column)
                 }
             },
         }
@@ -132,30 +94,14 @@ pub enum SymbolTableError<'input> {
 impl<'input> fmt::Display for SymbolTableError<'input> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         return match self {
-            SymbolTableError::VariableAlreadyDefinedError { name } => {
-                write!(f, "Variable `{}` already defined", name.purple())
-            }
-            SymbolTableError::FunctionAlreadyDefinedError { name } => {
-                write!(f, "Function `{}` already defined", name.purple())
-            }
-            SymbolTableError::VariableNotFoundError { name } => {
-                write!(f, "Variable `{}` not found", name.purple())
-            }
+            SymbolTableError::VariableAlreadyDefinedError { name } => write!(f, "Variable `{}` already defined", name.purple()),
+            SymbolTableError::FunctionAlreadyDefinedError { name } => write!(f, "Function `{}` already defined", name.purple()),
+            SymbolTableError::VariableNotFoundError { name } => write!(f, "Variable `{}` not found", name.purple()),
             SymbolTableError::TypesNotMatchError => write!(f, "Wrong type detected"),
-            SymbolTableError::FunctionNotFoundError { name } => {
-                write!(f, "Function `{}` not found", name.purple())
-            }
-            SymbolTableError::WrongNumberOfArguments { name } => write!(
-                f,
-                "Wrong number of arguments when calling function `{}`",
-                name.purple()
-            ),
-            SymbolTableError::MainFunctionDoesNotExists => {
-                write!(f, "Main function does not exists")
-            }
-            SymbolTableError::MainFunctionReturnTypeMustBeInt => {
-                write!(f, "Main function return type must be int")
-            }
+            SymbolTableError::FunctionNotFoundError { name } => write!(f, "Function `{}` not found", name.purple()),
+            SymbolTableError::WrongNumberOfArguments { name } => write!(f, "Wrong number of arguments when calling function `{}`", name.purple()),
+            SymbolTableError::MainFunctionDoesNotExists => write!(f, "Main function does not exists"),
+            SymbolTableError::MainFunctionReturnTypeMustBeInt => write!(f, "Main function return type must be int"),
         };
     }
 }

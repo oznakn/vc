@@ -12,11 +12,7 @@ pub struct LocationWithLineColumn {
 
 impl fmt::Display for LocationWithLineColumn {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            format!("{}:{}", self.line + 1, self.column + 1).blue()
-        )
+        write!(f, "{}", format!("{}:{}", self.line + 1, self.column + 1).blue())
     }
 }
 
@@ -31,21 +27,12 @@ impl<'input> Lines {
     pub fn new(src: &'input str) -> Self {
         let mut len = 0;
         let starting_bytes = {
-            let input_indices = src
-                .chars()
-                .into_iter()
-                .inspect(|_| len += 1)
-                .enumerate()
-                .filter(|&(_, b)| b == '\n')
-                .map(|(i, _)| i + 1); // index of first char in the line
+            let input_indices = src.chars().into_iter().inspect(|_| len += 1).enumerate().filter(|&(_, b)| b == '\n').map(|(i, _)| i + 1); // index of first char in the line
 
             iter::once(0).chain(input_indices).collect()
         };
 
-        Lines {
-            starting_bytes,
-            end: len,
-        }
+        Lines { starting_bytes, end: len }
     }
 
     fn line(&self, line_number: usize) -> Option<Location> {
@@ -56,11 +43,7 @@ impl<'input> Lines {
         if *pos <= self.end {
             let line_index = self.line_number_at_byte(*pos);
 
-            self.line(line_index)
-                .map(|line_byte| LocationWithLineColumn {
-                    line: line_index,
-                    column: pos - line_byte,
-                })
+            self.line(line_index).map(|line_byte| LocationWithLineColumn { line: line_index, column: pos - line_byte })
         } else {
             None
         }
@@ -69,10 +52,6 @@ impl<'input> Lines {
     fn line_number_at_byte(&self, byte: Location) -> usize {
         let num_lines = self.starting_bytes.len();
 
-        (0..num_lines)
-            .filter(|&i| self.starting_bytes[i] > byte)
-            .map(|i| i - 1)
-            .next()
-            .unwrap_or(num_lines - 1)
+        (0..num_lines).filter(|&i| self.starting_bytes[i] > byte).map(|i| i - 1).next().unwrap_or(num_lines - 1)
     }
 }

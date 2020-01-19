@@ -188,7 +188,11 @@ pub struct Builder {
 
 impl<'input> Builder {
     fn new() -> Self {
-        return Builder { labels: HashSet::new(), const_counter: 0, var_counter: 0 };
+        return Builder {
+            labels: HashSet::new(),
+            const_counter: 0,
+            var_counter: 0,
+        };
     }
 
     fn generate_label(&mut self, prefix: &str, suffix: u64) -> Label {
@@ -517,7 +521,13 @@ impl<'input> Builder {
                 self.put_jump(ir_context, start_label);
                 self.put_label(ir_context, continue_label);
             }
-            ast::Statement::ForStatement { init_variable, start_expression, to_expression, by_expression, body } => {
+            ast::Statement::ForStatement {
+                init_variable,
+                start_expression,
+                to_expression,
+                by_expression,
+                body,
+            } => {
                 let start_label = self.generate_label(&function.name, 0);
                 let continue_label = self.generate_label(&function.name, 0);
 

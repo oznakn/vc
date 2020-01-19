@@ -21,17 +21,13 @@ fn compile_command(matches: &clap::ArgMatches) -> Result<(), CliError> {
         error: format!("File not found: {}", input_file),
     })?;
 
-    let program = parser::parse(&content).map_err(|err| CliError {
-        error: format!("{}", err.to_string(&content)),
-    })?;
+    let program = parser::parse(&content).map_err(|err| CliError { error: format!("{}", err.to_string(&content)) })?;
 
     if matches.is_present("ast") {
         dbg!(&program);
     }
 
-    let table = symbol_table::SymbolTable::build(&program).map_err(|err| CliError {
-        error: format!("{}", err),
-    })?;
+    let table = symbol_table::SymbolTable::build(&program).map_err(|err| CliError { error: format!("{}", err) })?;
 
     if matches.is_present("table") {
         dbg!(&table);
@@ -58,9 +54,7 @@ fn compile_command(matches: &clap::ArgMatches) -> Result<(), CliError> {
     } else {
         let path = Path::new(&input_file).with_extension("s");
 
-        fs::write(Path::new(&path), assembly).map_err(|err| CliError {
-            error: format!("{}", err),
-        })?;
+        fs::write(Path::new(&path), assembly).map_err(|err| CliError { error: format!("{}", err) })?;
     }
 
     return Ok(());
@@ -72,32 +66,11 @@ pub fn run_cli() {
         .version("0.1.0")
         .author("Ozan Akın")
         .about("Compiles V language, a programming language for CENG444 lecture")
-        .arg(
-            Arg::with_name("ast")
-                .long("emit-ast")
-                .help("Emits the abstract syntax tree"),
-        )
-        .arg(
-            Arg::with_name("ir")
-                .long("emit-ir")
-                .help("Emits the intermediate representation"),
-        )
-        .arg(
-            Arg::with_name("table")
-                .long("emit-symbol-table")
-                .help("Emits the symbol table"),
-        )
-        .arg(
-            Arg::with_name("print")
-                .long("print")
-                .help("Print assembly instead of writing a file"),
-        )
-        .arg(
-            Arg::with_name("input")
-                .help("Sets the input file to use")
-                .required(true)
-                .index(1),
-        );
+        .arg(Arg::with_name("ast").long("emit-ast").help("Emits the abstract syntax tree"))
+        .arg(Arg::with_name("ir").long("emit-ir").help("Emits the intermediate representation"))
+        .arg(Arg::with_name("table").long("emit-symbol-table").help("Emits the symbol table"))
+        .arg(Arg::with_name("print").long("print").help("Print assembly instead of writing a file"))
+        .arg(Arg::with_name("input").help("Sets the input file to use").required(true).index(1));
 
     let matches = app.get_matches();
 

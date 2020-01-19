@@ -9,9 +9,9 @@ C0:
 C1:
         .string     "\n"
 C2:
-        .word       0
-C3:
         .word       1
+C3:
+        .word       0
 C4:
         .double     1.2000
 C5:
@@ -189,7 +189,7 @@ main:
         addi        a2, x0, 4
         addi        a7, x0, 64
         ecall       
-        lw          a0, C2
+        lw          a0, C3
         ld          ra, 12(sp)
         addi        sp, sp, 20
         ret         

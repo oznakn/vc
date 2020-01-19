@@ -14,7 +14,12 @@ pub struct Function<'input> {
 
 impl<'input> Function<'input> {
     fn new(name: &'input str, return_type: &'input ast::ValueType) -> Self {
-        return Function { name, return_type, parameter_list: Vec::new(), variables: HashMap::new() };
+        return Function {
+            name,
+            return_type,
+            parameter_list: Vec::new(),
+            variables: HashMap::new(),
+        };
     }
 }
 
@@ -117,10 +122,10 @@ impl<'input> SymbolTable<'input> {
                     self.check_expression(&variable.expression)?;
                 }
 
-                let value_type = self.check_value_type_matches(variable)?;
-                let expression_type = self.check_expression(expression)?;
+                let variable_value_type = self.check_value_type_matches(variable)?;
+                let expression_value_type = self.check_expression(expression)?;
 
-                if value_type.plain() == ast::ValueType::Int && expression_type.plain() == ast::ValueType::Real {
+                if !expression_value_type.is_fits_into(&variable_value_type) {
                     return Err(SymbolTableError::TypesNotMatchError);
                 }
             }
@@ -131,9 +136,9 @@ impl<'input> SymbolTable<'input> {
                             self.strings.insert(s);
                         }
                         ast::Printable::Expression(e) => {
-                            let expression_type = self.check_expression(e)?;
+                            let expression_value_type = self.check_expression(e)?;
 
-                            if expression_type.requires_index() {
+                            if expression_value_type.requires_index() {
                                 return Err(SymbolTableError::TypesNotMatchError);
                             }
                         }
@@ -142,17 +147,17 @@ impl<'input> SymbolTable<'input> {
             }
             ast::Statement::ReadStatement { parameter_list } => {
                 for parameter in parameter_list {
-                    let expression_type = self.check_value_type_matches(parameter)?;
+                    let expression_value_type = self.check_value_type_matches(parameter)?;
 
-                    if expression_type.requires_index() {
+                    if expression_value_type.requires_index() {
                         return Err(SymbolTableError::TypesNotMatchError);
                     }
                 }
             }
             ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
-                let if_expression_type = self.check_expression(expression)?;
+                let if_expression_value_type = self.check_expression(expression)?;
 
-                if if_expression_type.requires_index() || if_expression_type.plain() == ast::ValueType::Real {
+                if !if_expression_value_type.is_represents_bool() {
                     return Err(SymbolTableError::TypesNotMatchError);
                 }
 
@@ -167,9 +172,9 @@ impl<'input> SymbolTable<'input> {
                 }
             }
             ast::Statement::WhileStatement { expression, body } => {
-                let expression_type = self.check_expression(expression)?;
+                let expression_value_type = self.check_expression(expression)?;
 
-                if expression_type.requires_index() || expression_type.plain() == ast::ValueType::Real {
+                if !expression_value_type.is_represents_bool() {
                     return Err(SymbolTableError::TypesNotMatchError);
                 }
 
@@ -177,43 +182,39 @@ impl<'input> SymbolTable<'input> {
                     self.check_statement(item)?;
                 }
             }
-            ast::Statement::ForStatement { .. } => {
-                /*let init_value_type = self.fetch_value_type( current_function, init_variable)?;
+            ast::Statement::ForStatement {
+                init_variable,
+                start_expression,
+                to_expression,
+                by_expression,
+                body,
+            } => {
+                let init_variable_value_type = self.fetch_value_type(init_variable)?;
 
-                let start_expression_type = self.check_expression(functions, current_function, start_expression)?;
+                let start_expression_value_type = self.check_expression(start_expression)?;
+                if !start_expression_value_type.is_fits_into(&init_variable_value_type) {
+                    return Err(SymbolTableError::TypesNotMatchError);
+                }
 
-                let to_expression_type = self.check_expression(functions, current_function, to_expression)?;
-
-                /* let mut by_expression_type_option = None;
+                let to_expression_value_type = self.check_expression(to_expression)?;
+                if !to_expression_value_type.is_fits_into(&init_variable_value_type) {
+                    return Err(SymbolTableError::TypesNotMatchError);
+                }
 
                 match by_expression {
-                    ast::Expression::Empty => {},
+                    ast::Expression::Empty => {}
                     _ => {
-                        by_expression_type_option = Some(self.check_expression(functions, current_function, by_expression)?);
+                        let by_expression_value_type = self.check_expression(by_expression)?;
+
+                        if !by_expression_value_type.is_fits_into(&init_variable_value_type) {
+                            return Err(SymbolTableError::TypesNotMatchError);
+                        }
                     }
                 }
-                */
-
-                /*
-                 TODO
-                 if !init_value_type.eq(&start_expression_type) {
-                    return Err(SymbolTableError::TypesNotMatchError);
-                }
-
-                if !init_value_type.eq(&to_expression_type) {
-                    return Err(SymbolTableError::TypesNotMatchError);
-                }
-
-                if let Some(by_expression_type) = by_expression_type_option {
-                    if !init_value_type.eq(&by_expression_type) {
-                        return Err(SymbolTableError::TypesNotMatchError);
-                    }
-                }
-                */
 
                 for item in body {
-                    self.check_statement(functions, current_function, item)?;
-                } */
+                    self.check_statement(item)?;
+                }
             }
             ast::Statement::ReturnStatement { expression } => {
                 let expression_type = self.check_expression(expression)?;
@@ -230,17 +231,13 @@ impl<'input> SymbolTable<'input> {
     fn check_expression(&mut self, expression: &'input ast::Expression<'input>) -> Result<ast::ValueType, SymbolTableError<'input>> {
         match expression {
             ast::Expression::FunctionCallExpression { name, argument_list } => {
-                /* if !current_function.name.eq(*name) && !self.fu.contains_key(name) { // TODO: enable later
-                    dbg!(current_function.name, name);
-                    return Err(SymbolTableError::FunctionNotFoundError {
-                        name,
-                    });
-                } */
+                if !self.functions.contains_key(*name) {
+                    return Err(SymbolTableError::FunctionNotFoundError { name });
+                }
 
                 self.function_call_set.insert(name);
 
                 let mut argument_types = Vec::new();
-
                 for expression in argument_list {
                     let expression_type = self.check_expression(expression)?;
 
@@ -248,7 +245,6 @@ impl<'input> SymbolTable<'input> {
                 }
 
                 let call_function = self.functions.get(*name).unwrap();
-
                 if call_function.parameter_list.len() != argument_types.len() {
                     return Err(SymbolTableError::WrongNumberOfArguments { name: call_function.name });
                 }
@@ -265,41 +261,47 @@ impl<'input> SymbolTable<'input> {
                     i += 1;
                 }
 
-                return Ok(call_function.return_type.clone());
+                Ok(call_function.return_type.to_owned())
             }
             ast::Expression::VariableExpression(variable_identifier) => {
                 if variable_identifier.use_index {
                     self.check_expression(&variable_identifier.expression)?;
                 }
 
-                return Ok(self.check_value_type_matches(variable_identifier)?.clone());
+                Ok(self.check_value_type_matches(variable_identifier)?.to_owned())
             }
             ast::Expression::BinaryExpression { left_expression, operator, right_expression } => {
                 let operand1_type = self.check_expression(left_expression)?;
                 let operand2_type = self.check_expression(right_expression)?;
 
-                if *operator == ast::BinaryOperator::And || *operator == ast::BinaryOperator::Or || *operator == ast::BinaryOperator::IntDivision || *operator == ast::BinaryOperator::NotEqual || *operator == ast::BinaryOperator::Greater || *operator == ast::BinaryOperator::GreaterEqual || *operator == ast::BinaryOperator::Less || *operator == ast::BinaryOperator::LessEqual {
+                if *operator == ast::BinaryOperator::And
+                    || *operator == ast::BinaryOperator::Or
+                    || *operator == ast::BinaryOperator::IntDivision
+                    || *operator == ast::BinaryOperator::NotEqual
+                    || *operator == ast::BinaryOperator::Greater
+                    || *operator == ast::BinaryOperator::GreaterEqual
+                    || *operator == ast::BinaryOperator::Less
+                    || *operator == ast::BinaryOperator::LessEqual
+                {
                     return Ok(ast::ValueType::Int);
                 } else if *operator == ast::BinaryOperator::Division {
                     return Ok(ast::ValueType::Real);
-                } else if (operand1_type == ast::ValueType::Int && operand2_type == ast::ValueType::Real) || (operand1_type == ast::ValueType::Real && operand2_type == ast::ValueType::Int) {
+                } else if operand1_type == ast::ValueType::Real || operand2_type == ast::ValueType::Real {
                     return Ok(ast::ValueType::Real);
                 }
 
-                return Ok(operand1_type);
+                Ok(operand1_type)
             }
-            ast::Expression::UnaryExpression { expression, operator: _ } => {
-                return Ok(self.check_expression(expression)?.clone());
-            }
+            ast::Expression::UnaryExpression { expression, operator: _ } => Ok(self.check_expression(expression)?.to_owned()),
             ast::Expression::IntExpression(value) => {
                 self.ints.insert(*value);
 
-                return Ok(ast::ValueType::Int);
+                Ok(ast::ValueType::Int)
             }
             ast::Expression::RealExpression(value) => {
                 self.reals.push(*value);
 
-                return Ok(ast::ValueType::Real);
+                Ok(ast::ValueType::Real)
             }
             ast::Expression::Empty => unreachable!(),
         }

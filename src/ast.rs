@@ -46,6 +46,26 @@ pub enum ValueType {
 }
 
 impl ValueType {
+    pub fn is_represents_bool(&self) -> bool {
+        match self {
+            ValueType::Bool => true,
+            ValueType::Int => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_fits_into(&self, v: &ValueType) -> bool {
+        if self.plain() == v.plain() {
+            return true;
+        }
+
+        match self.plain() {
+            ValueType::Char => v.plain() == ValueType::Int,
+            ValueType::Int => v.plain() == ValueType::Real,
+            _ => false,
+        }
+    }
+
     pub fn requires_index(&self) -> bool {
         return match *self {
             ValueType::Vector(_, _) => true,
@@ -104,9 +124,19 @@ pub enum Expression<'input> {
     IntExpression(u64),
     RealExpression(f64),
     VariableExpression(VariableIdentifier<'input>),
-    FunctionCallExpression { name: &'input str, argument_list: Vec<Expression<'input>> },
-    UnaryExpression { expression: Box<Expression<'input>>, operator: UnaryOperator },
-    BinaryExpression { left_expression: Box<Expression<'input>>, right_expression: Box<Expression<'input>>, operator: BinaryOperator },
+    FunctionCallExpression {
+        name: &'input str,
+        argument_list: Vec<Expression<'input>>,
+    },
+    UnaryExpression {
+        expression: Box<Expression<'input>>,
+        operator: UnaryOperator,
+    },
+    BinaryExpression {
+        left_expression: Box<Expression<'input>>,
+        right_expression: Box<Expression<'input>>,
+        operator: BinaryOperator,
+    },
     Empty,
 }
 
