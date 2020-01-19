@@ -274,7 +274,7 @@ impl<'input> IRContext<'input> {
     }
 
     fn generate_local(&mut self, value_type: &ast::ValueType) -> ValueStorage {
-        let current_function = self.function_map.get_mut(self.current_function.unwrap()).unwrap();
+        let current_function: &mut Function<'input> = self.function_map.get_mut(self.current_function.unwrap()).unwrap();
 
         let index = current_function.local_map.len() as u64;
 
@@ -286,7 +286,7 @@ impl<'input> IRContext<'input> {
     }
 
     fn set_current_function_variable_storage_map_item(&mut self, name: &'input str, value_storage: ValueStorage) {
-        let current_function = self.function_map.get_mut(self.current_function.unwrap()).unwrap();
+        let current_function: &mut Function<'input> = self.function_map.get_mut(self.current_function.unwrap()).unwrap();
 
         current_function.variable_storage_map.insert(name, value_storage);
     }
@@ -371,8 +371,8 @@ impl<'input> IRContext<'input> {
         self.items.push(IRItem::EndFunction());
     }
 
-    fn fetch_variable(&mut self, variable: &str) -> Option<(ValueStorage, ast::ValueType)> {
-        let current_function = self.function_map.get(self.current_function.unwrap()).unwrap();
+    fn fetch_variable(&self, variable: &str) -> Option<(ValueStorage, ast::ValueType)> {
+        let current_function: &Function<'input> = self.function_map.get(self.current_function.unwrap()).unwrap();
 
         let mut value_storage_option = None;
 
@@ -388,11 +388,11 @@ impl<'input> IRContext<'input> {
             return Some((value_storage, value_type));
         }
 
-        return None;
+        None
     }
 
-    fn fetch_value_type(&mut self, value_storage: &ValueStorage) -> ast::ValueType {
-        let current_function = self.function_map.get(self.current_function.unwrap()).unwrap();
+    fn fetch_value_type(&self, value_storage: &ValueStorage) -> ast::ValueType {
+        let current_function: &Function<'input> = self.function_map.get(self.current_function.unwrap()).unwrap();
 
         return fetch_value_type(self, current_function, value_storage);
     }

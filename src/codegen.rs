@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::ast;
 use crate::ir;
-use crate::ir::{fetch_value_type, ValueStorage};
+use crate::ir::fetch_value_type;
 use crate::MAIN_FUNCTION;
 
 const START_LABEL: &str = "_start";
@@ -156,7 +156,7 @@ const PRINT_REAL_CODE: &str = "
         ret
 ";
 
-fn value_storage_to_size(_value_storage: &ValueStorage) -> usize {
+fn value_storage_to_size(_value_storage: &ir::ValueStorage) -> usize {
     4
 }
 
