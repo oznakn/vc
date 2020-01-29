@@ -55,15 +55,20 @@ impl ValueType {
     }
 
     pub fn is_fits_into(&self, v: &ValueType) -> bool {
-        if self.plain() == v.plain() {
+        if self.eq(v) {
             return true;
         }
 
-        match self.plain() {
-            ValueType::Char => v.plain() == ValueType::Int,
-            ValueType::Int => v.plain() == ValueType::Real,
+        match self {
+            ValueType::Bool => v.eq(&ValueType::Char) || v.eq(&ValueType::Int),
+            ValueType::Char => v.eq(&ValueType::Int),
+            ValueType::Int => v.eq(&ValueType::Real),
             _ => false,
         }
+    }
+
+    pub fn requires_cast(&self, v: &ValueType) -> bool {
+        self.is_fits_into(v) && !self.eq(v)
     }
 
     pub fn requires_index(&self) -> bool {

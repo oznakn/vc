@@ -12,13 +12,33 @@ pub enum ValueStorage {
     Local(u64),
 }
 
-// Use only developmental purposes
+// Use only for in representation
 impl fmt::Display for ValueStorage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ValueStorage::Const(i) => write!(f, ".c{}", i),
             ValueStorage::Var(i) => write!(f, ".v{}", i),
             ValueStorage::Local(i) => write!(f, ".l{}", i),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ConstValue<'input> {
+    Bool(bool),
+    String(&'input str),
+    Int(u64),
+    Real(f64),
+}
+
+// Use only in IR representation
+impl<'input> fmt::Display for ConstValue<'input> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConstValue::Bool(b) => write!(f, "{}", b),
+            ConstValue::String(s) => write!(f, "\"{}\"", s),
+            ConstValue::Int(v) => write!(f, "{}", v),
+            ConstValue::Real(v) => write!(f, "{}", v),
         }
     }
 }
@@ -79,9 +99,7 @@ impl fmt::Display for Op {
 
 #[derive(Clone, Debug)]
 pub enum IRItem<'input> {
-    ConstString(ValueStorage, &'input str),
-    ConstInt(ValueStorage, u64),
-    ConstReal(ValueStorage, f64),
+    Const(ValueStorage, ConstValue<'input>),
     Start(),
     Label(Label),
     Function(&'input str),
@@ -94,7 +112,7 @@ pub enum IRItem<'input> {
     Fetch(ValueStorage, VariablePointer),
     Bz(Label, ValueStorage),
     Var(ValueStorage),
-    Promote(ValueStorage, ValueStorage),
+    Cast(ValueStorage, ValueStorage),
     BinaryOp(ValueStorage, Op, ValueStorage, ValueStorage),
     UnaryOp(ValueStorage, Op, ValueStorage),
     Print(ValueStorage),
@@ -106,9 +124,7 @@ pub enum IRItem<'input> {
 impl<'input> fmt::Display for IRItem<'input> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            IRItem::ConstString(label, s) => write!(f, "const_string({}, \"{}\")", label, s),
-            IRItem::ConstInt(label, v) => write!(f, "const_int({}, {})", label, v),
-            IRItem::ConstReal(label, v) => write!(f, "const_real({}, {})", label, v),
+            IRItem::Const(value_storage, const_value) => write!(f, "const({}, {})", value_storage, const_value),
             IRItem::Start() => write!(f, "start()"),
             IRItem::Label(label) => write!(f, "{}:", label),
             IRItem::Function(label) => write!(f, "{}:", label),
@@ -121,19 +137,13 @@ impl<'input> fmt::Display for IRItem<'input> {
             IRItem::Fetch(to, from) => write!(f, "store({}[{}], {})", to, &from.0, &from.1),
             IRItem::Bz(label, value_storage) => write!(f, "bz({}, {})", label, value_storage),
             IRItem::Var(value_storage) => write!(f, "var({})", value_storage),
-            IRItem::Promote(to, from) => write!(f, "promote({}, {})", to, from),
+            IRItem::Cast(to, from) => write!(f, "promote({}, {})", to, from),
             IRItem::BinaryOp(target, op, operand1, operand2) => write!(f, "binary_op({}, {}, {}, {})", target, op, operand1, operand2),
             IRItem::UnaryOp(target, op, operand) => write!(f, "unary_op({}, {}, {})", target, op, operand),
             IRItem::Print(label) => write!(f, "print({})", label),
             IRItem::Read(label) => write!(f, "read({})", label),
             IRItem::Return(label) => write!(f, "return({})", label),
-            IRItem::Call(label, return_label, arguments) => write!(
-                f,
-                "call({}, {}, [{}])",
-                label,
-                return_label,
-                arguments.iter().map(|s| format!("{}", s)).collect::<Vec<String>>().join(", ")
-            ),
+            IRItem::Call(label, return_label, arguments) => write!(f, "call({}, {}, [{}])", label, return_label, arguments.iter().map(|s| format!("{}", s)).collect::<Vec<String>>().join(", ")),
         }
     }
 }
@@ -242,18 +252,8 @@ impl<'input> IRContext<'input> {
     }
 
     #[inline]
-    fn put_const_string(&mut self, value_storage: ValueStorage, s: &'input str) {
-        self.items.push(IRItem::ConstString(value_storage, s));
-    }
-
-    #[inline]
-    fn put_const_int(&mut self, value_storage: ValueStorage, v: u64) {
-        self.items.push(IRItem::ConstInt(value_storage, v));
-    }
-
-    #[inline]
-    fn put_const_real(&mut self, value_storage: ValueStorage, v: f64) {
-        self.items.push(IRItem::ConstReal(value_storage, v));
+    fn put_const(&mut self, value_storage: ValueStorage, const_value: ConstValue<'input>) {
+        self.items.push(IRItem::Const(value_storage, const_value));
     }
 
     fn generate_var(&mut self, value_type: &ast::ValueType) -> ValueStorage {
@@ -312,8 +312,8 @@ impl<'input> IRContext<'input> {
     }
 
     #[inline]
-    fn put_promote(&mut self, to: ValueStorage, from: ValueStorage) {
-        self.items.push(IRItem::Promote(to, from));
+    fn put_cast(&mut self, to: ValueStorage, from: ValueStorage) {
+        self.items.push(IRItem::Cast(to, from));
     }
 
     #[inline]
@@ -400,26 +400,26 @@ impl<'input> IRContext<'input> {
     fn build_statement(&mut self, ast_statement: &'input ast::Statement) {
         match ast_statement {
             ast::Statement::AssignmentStatement { variable, expression } => {
-                let mut result = self.build_expression(expression);
-                let result_type = self.fetch_value_type(&result);
+                let mut expression_value_storage = self.build_expression(expression);
+                let expression_value_type = self.fetch_value_type(&expression_value_storage);
 
-                let (variable_label, value_type) = self.fetch_variable(variable.name).unwrap();
+                let (variable_value_storage, variable_value_type) = self.fetch_variable(variable.name).unwrap();
 
-                if value_type.plain() == ast::ValueType::Real && result_type == ast::ValueType::Int {
-                    let temp = self.generate_local(&ast::ValueType::Real);
+                if expression_value_type.requires_cast(&variable_value_type) {
+                    let temp = self.generate_local(&variable_value_type);
                     self.put_local(temp.to_owned());
 
-                    self.put_promote(temp.to_owned(), result);
+                    self.put_cast(temp.to_owned(), expression_value_storage);
 
-                    result = temp;
+                    expression_value_storage = temp;
                 }
 
-                if value_type.requires_index() {
-                    let index_expression = self.build_expression(&variable.expression);
+                if variable_value_type.requires_index() {
+                    let index_expression_value_storage = self.build_expression(&variable.expression);
 
-                    self.put_store((variable_label, index_expression), result);
+                    self.put_store((variable_value_storage, index_expression_value_storage), expression_value_storage);
                 } else {
-                    self.put_move(variable_label, result);
+                    self.put_move(variable_value_storage, expression_value_storage);
                 }
             }
             ast::Statement::PrintStatement { parameter_list } => {
@@ -432,22 +432,22 @@ impl<'input> IRContext<'input> {
                     let parameter = &parameter_list[i];
 
                     match parameter {
-                        ast::Printable::Expression(e) => {
-                            let label = self.build_expression(e);
+                        ast::Printable::Expression(expression) => {
+                            let value_storage = self.build_expression(expression);
 
-                            self.put_print(label);
+                            self.put_print(value_storage);
                         }
                         ast::Printable::String(s) => {
-                            let string_item = self.string_map.get(*s).unwrap().to_owned();
+                            let string_value_storage = self.string_map.get(*s).unwrap().to_owned();
 
-                            self.put_print(string_item);
+                            self.put_print(string_value_storage);
                         }
                     }
 
                     if i == parameter_list.len() - 1 {
-                        self.put_print(newline_string_item.to_owned());
+                        self.put_print(newline_string_item.clone());
                     } else {
-                        self.put_print(space_string_item.to_owned());
+                        self.put_print(space_string_item.clone());
                     }
 
                     i += 1;
@@ -455,34 +455,29 @@ impl<'input> IRContext<'input> {
             }
             ast::Statement::ReadStatement { parameter_list } => {
                 for parameter in parameter_list {
-                    let (variable_label, value_type) = self.fetch_variable(parameter.name).unwrap();
+                    let (variable_storage, variable_value_type) = self.fetch_variable(parameter.name).unwrap();
 
-                    if !value_type.requires_index() {
-                        self.put_read(variable_label);
-                    } else {
-                        let index_expression = self.build_expression(&parameter.expression);
+                    if variable_value_type.requires_index() {
+                        let index_expression_value_storage = self.build_expression(&parameter.expression);
 
-                        let temp = self.generate_local(&value_type.plain());
+                        let temp = self.generate_local(&variable_value_type.plain());
                         self.put_local(temp.to_owned());
 
                         self.put_read(temp.to_owned());
 
-                        self.put_store((variable_label, index_expression), temp);
+                        self.put_store((variable_storage, index_expression_value_storage), temp);
+                    } else {
+                        self.put_read(variable_storage);
                     }
                 }
             }
-            ast::Statement::IfStatement {
-                expression,
-                if_body,
-                else_body,
-                use_else,
-            } => {
-                let if_expression_label = self.build_expression(expression);
+            ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
+                let if_expression_value_storage = self.build_expression(expression);
 
                 let finish_label = self.generate_label(0);
                 let else_label = self.generate_label(0);
 
-                self.put_bz(else_label.clone(), if_expression_label);
+                self.put_bz(else_label.clone(), if_expression_value_storage);
 
                 for statement in if_body {
                     self.build_statement(statement);
@@ -503,9 +498,9 @@ impl<'input> IRContext<'input> {
 
                 self.put_label(start_label.clone());
 
-                let expression_value = self.build_expression(expression);
+                let expression_value_storage = self.build_expression(expression);
 
-                self.put_bz(continue_label.clone(), expression_value);
+                self.put_bz(continue_label.clone(), expression_value_storage);
 
                 for statement in body {
                     self.build_statement(statement);
@@ -523,42 +518,42 @@ impl<'input> IRContext<'input> {
                 let start_label = self.generate_label(0);
                 let continue_label = self.generate_label(0);
 
-                let init_variable_context = self.fetch_variable(init_variable.name).unwrap();
+                let (init_variable_value_storage, init_variable_value_type) = self.fetch_variable(init_variable.name).unwrap();
 
                 let start_expression_value = self.build_expression(start_expression);
 
-                self.put_move(init_variable_context.0.to_owned(), start_expression_value);
+                self.put_move(init_variable_value_storage.to_owned(), start_expression_value);
 
-                let to_expression_value = self.build_expression(to_expression);
-                let by_expression_value;
+                let to_expression_value_storage = self.build_expression(to_expression);
+                let by_expression_value_storage;
 
                 match by_expression {
-                    ast::Expression::Empty => match init_variable_context.1 {
+                    ast::Expression::Empty => match init_variable_value_type {
                         ast::ValueType::Int => {
-                            by_expression_value = self.int_map.get("1").unwrap().to_owned();
+                            by_expression_value_storage = self.int_map.get("1").unwrap().to_owned();
                         }
                         ast::ValueType::Real => {
-                            by_expression_value = self.real_map.get("1.0").unwrap().to_owned();
+                            by_expression_value_storage = self.real_map.get("1.0").unwrap().to_owned();
                         }
                         _ => unreachable!(),
                     },
                     _ => {
-                        by_expression_value = self.build_expression(by_expression);
+                        by_expression_value_storage = self.build_expression(by_expression);
                     }
                 }
 
-                let check_variable_value_storage = self.generate_local(&init_variable_context.1);
+                let check_variable_value_storage = self.generate_local(&init_variable_value_type);
                 self.put_local(check_variable_value_storage.clone());
 
                 self.put_label(start_label.clone());
 
-                self.put_binary_op(check_variable_value_storage.clone(), Op::LessEq, init_variable_context.0.to_owned(), to_expression_value);
+                self.put_binary_op(check_variable_value_storage.clone(), Op::LessEq, init_variable_value_storage.to_owned(), to_expression_value_storage);
                 self.put_bz(continue_label.clone(), check_variable_value_storage.clone());
 
                 for statement in body {
                     self.build_statement(statement);
                 }
-                self.put_binary_op(init_variable_context.0.to_owned(), Op::Add, init_variable_context.0.to_owned(), by_expression_value);
+                self.put_binary_op(init_variable_value_storage.to_owned(), Op::Add, init_variable_value_storage.to_owned(), by_expression_value_storage);
 
                 self.put_jump(start_label);
                 self.put_label(continue_label);
@@ -615,11 +610,7 @@ impl<'input> IRContext<'input> {
 
                 label
             }
-            ast::Expression::BinaryExpression {
-                left_expression,
-                operator,
-                right_expression,
-            } => {
+            ast::Expression::BinaryExpression { left_expression, operator, right_expression } => {
                 let mut operand1 = self.build_expression(left_expression);
                 let mut operand2 = self.build_expression(right_expression);
 
@@ -647,7 +638,7 @@ impl<'input> IRContext<'input> {
                     let temp = self.generate_local(&ast::ValueType::Real);
                     self.put_local(temp.to_owned());
 
-                    self.put_promote(temp.to_owned(), operand1.to_owned());
+                    self.put_cast(temp.to_owned(), operand1.to_owned());
 
                     operand1 = temp;
                     result_type = ast::ValueType::Real;
@@ -655,7 +646,7 @@ impl<'input> IRContext<'input> {
                     let temp = self.generate_local(&ast::ValueType::Real);
                     self.put_local(temp.to_owned());
 
-                    self.put_promote(temp.to_owned(), operand2.to_owned());
+                    self.put_cast(temp.to_owned(), operand2.to_owned());
 
                     operand2 = temp;
                     result_type = ast::ValueType::Real;
@@ -753,7 +744,8 @@ impl<'input> IRContext<'input> {
     fn initialize_consts(&mut self) {
         for s in &self.symbol_table.strings {
             let value_storage = self.generate_const();
-            self.put_const_string(value_storage.to_owned(), s);
+
+            self.put_const(value_storage.to_owned(), ConstValue::String(s));
 
             self.string_map.insert(s, value_storage.to_owned());
             self.const_map.insert(value_storage, ast::ValueType::String);
@@ -761,7 +753,8 @@ impl<'input> IRContext<'input> {
 
         for (k, v) in &self.symbol_table.ints {
             let value_storage = self.generate_const();
-            self.put_const_int(value_storage.to_owned(), *v);
+
+            self.put_const(value_storage.to_owned(), ConstValue::Int(*v));
 
             self.int_map.insert(k, value_storage.to_owned());
             self.const_map.insert(value_storage, ast::ValueType::Int);
@@ -769,7 +762,8 @@ impl<'input> IRContext<'input> {
 
         for (k, v) in &self.symbol_table.reals {
             let value_storage = self.generate_const();
-            self.put_const_real(value_storage.to_owned(), *v);
+
+            self.put_const(value_storage.to_owned(), ConstValue::Real(*v));
 
             self.real_map.insert(k, value_storage.to_owned());
             self.const_map.insert(value_storage, ast::ValueType::Real);

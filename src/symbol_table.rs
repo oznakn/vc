@@ -25,11 +25,13 @@ impl<'input> Function<'input> {
 
 #[derive(Clone, Debug)]
 pub struct SymbolTable<'input> {
+    pub strings: IndexSet<&'input str>,
     pub ints: IndexMap<String, u64>,
     pub reals: IndexMap<String, f64>,
-    pub strings: IndexSet<&'input str>,
+
     pub functions: HashMap<&'input str, Function<'input>>,
     pub variables: HashMap<&'input str, &'input ast::ValueType>,
+
     current_function: Option<&'input str>,
     function_call_set: HashSet<&'input str>,
 }
@@ -37,11 +39,13 @@ pub struct SymbolTable<'input> {
 impl<'input> SymbolTable<'input> {
     pub fn new() -> Self {
         return SymbolTable {
+            strings: IndexSet::new(),
             ints: IndexMap::new(),
             reals: IndexMap::new(),
-            strings: IndexSet::new(),
+
             functions: HashMap::new(),
             variables: HashMap::new(),
+
             current_function: None,
             function_call_set: HashSet::new(),
         };
@@ -143,12 +147,7 @@ impl<'input> SymbolTable<'input> {
                     }
                 }
             }
-            ast::Statement::IfStatement {
-                expression,
-                if_body,
-                else_body,
-                use_else,
-            } => {
+            ast::Statement::IfStatement { expression, if_body, else_body, use_else } => {
                 let if_expression_value_type = self.check_expression(expression)?;
 
                 if !if_expression_value_type.is_represents_bool() {
@@ -264,11 +263,7 @@ impl<'input> SymbolTable<'input> {
 
                 Ok(self.check_value_type_matches(variable_identifier)?.to_owned())
             }
-            ast::Expression::BinaryExpression {
-                left_expression,
-                operator,
-                right_expression,
-            } => {
+            ast::Expression::BinaryExpression { left_expression, operator, right_expression } => {
                 let operand1_type = self.check_expression(left_expression)?;
                 let operand2_type = self.check_expression(right_expression)?;
 

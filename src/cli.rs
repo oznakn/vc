@@ -47,9 +47,9 @@ fn compile_command(matches: &clap::ArgMatches) -> Result<(), CliError> {
         }
     }
 
-    let generated_code = codegen::CodeGenerator::build(&ir_context);
+    let generated_code = codegen::riscv::CodeGenerator::build(&ir_context);
 
-    let assembly = codegen::convert_to_string(&generated_code);
+    let assembly = codegen::riscv::convert_to_string(&generated_code);
 
     if matches.is_present("print") {
         println!("{}", assembly);
