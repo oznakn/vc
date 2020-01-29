@@ -45,7 +45,9 @@ fn compile_command(matches: &clap::ArgMatches) -> Result<(), CliError> {
 
     let generated_code = codegen::riscv64::CodeGenerator::build(&ir_context);
 
-    let assembly = codegen::riscv64::convert_to_string(&generated_code);
+    dbg!(generated_code);
+
+    /* let assembly = codegen::riscv64::convert_to_string(&generated_code);
 
     if matches.is_present("print") {
         println!("{}", assembly);
@@ -53,7 +55,7 @@ fn compile_command(matches: &clap::ArgMatches) -> Result<(), CliError> {
         let path = Path::new(&input_file).with_extension("s");
 
         fs::write(Path::new(&path), assembly).map_err(|err| CliError { error: format!("{}", err) })?;
-    }
+    } */
 
     return Ok(());
 }

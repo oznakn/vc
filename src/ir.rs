@@ -99,9 +99,9 @@ pub enum IRItem<'input> {
     Param(ValueStorage),
     Local(ValueStorage),
     Jump(Label),
-    Move(ValueStorage, ValueStorage),
-    Store(VariablePointer, ValueStorage),
-    Fetch(ValueStorage, VariablePointer),
+    Copy(ValueStorage, ValueStorage),
+    CopyToPointer(VariablePointer, ValueStorage),
+    CopyFromPointer(ValueStorage, VariablePointer),
     Bz(Label, ValueStorage),
     Var(ValueStorage),
     Cast(ValueStorage, ValueStorage),
@@ -124,9 +124,9 @@ impl<'input> fmt::Display for IRItem<'input> {
             IRItem::Local(value_storage) => write!(f, "local({})", value_storage),
             IRItem::Param(value_storage) => write!(f, "param({})", value_storage),
             IRItem::Jump(label) => write!(f, "jump({})", label),
-            IRItem::Move(to, from) => write!(f, "move({}, {})", to, from),
-            IRItem::Store(to, from) => write!(f, "store({}[{}], {})", &to.0, &to.1, from),
-            IRItem::Fetch(to, from) => write!(f, "store({}[{}], {})", to, &from.0, &from.1),
+            IRItem::Copy(to, from) => write!(f, "move({}, {})", to, from),
+            IRItem::CopyToPointer(to, from) => write!(f, "store({}[{}], {})", &to.0, &to.1, from),
+            IRItem::CopyFromPointer(to, from) => write!(f, "store({}[{}], {})", to, &from.0, &from.1),
             IRItem::Bz(label, value_storage) => write!(f, "bz({}, {})", label, value_storage),
             IRItem::Var(value_storage) => write!(f, "var({})", value_storage),
             IRItem::Cast(to, from) => write!(f, "promote({}, {})", to, from),
@@ -319,18 +319,18 @@ impl<'input> IRContext<'input> {
     }
 
     #[inline]
-    fn put_move(&mut self, to: ValueStorage, from: ValueStorage) {
-        self.items.push(IRItem::Move(to, from));
+    fn put_copy(&mut self, to: ValueStorage, from: ValueStorage) {
+        self.items.push(IRItem::Copy(to, from));
     }
 
     #[inline]
-    fn put_store(&mut self, to: VariablePointer, from: ValueStorage) {
-        self.items.push(IRItem::Store(to, from));
+    fn put_copy_to_pointer(&mut self, to: VariablePointer, from: ValueStorage) {
+        self.items.push(IRItem::CopyToPointer(to, from));
     }
 
     #[inline]
-    fn put_fetch(&mut self, to: ValueStorage, from: VariablePointer) {
-        self.items.push(IRItem::Fetch(to, from));
+    fn put_copy_from_pointer(&mut self, to: ValueStorage, from: VariablePointer) {
+        self.items.push(IRItem::CopyFromPointer(to, from));
     }
 
     #[inline]
@@ -413,9 +413,9 @@ impl<'input> IRContext<'input> {
                 if variable_value_type.requires_index() {
                     let index_expression_value_storage = self.build_expression(&variable.expression);
 
-                    self.put_store((variable_value_storage, index_expression_value_storage), expression_value_storage);
+                    self.put_copy_to_pointer((variable_value_storage, index_expression_value_storage), expression_value_storage);
                 } else {
-                    self.put_move(variable_value_storage, expression_value_storage);
+                    self.put_copy(variable_value_storage, expression_value_storage);
                 }
             }
             ast::Statement::PrintStatement { parameter_list } => {
@@ -461,7 +461,7 @@ impl<'input> IRContext<'input> {
 
                         self.put_read(temp.to_owned());
 
-                        self.put_store((variable_storage, index_expression_value_storage), temp);
+                        self.put_copy_to_pointer((variable_storage, index_expression_value_storage), temp);
                     } else {
                         self.put_read(variable_storage);
                     }
@@ -518,7 +518,7 @@ impl<'input> IRContext<'input> {
 
                 let start_expression_value = self.build_expression(start_expression);
 
-                self.put_move(init_variable_value_storage.to_owned(), start_expression_value);
+                self.put_copy(init_variable_value_storage.to_owned(), start_expression_value);
 
                 let to_expression_value_storage = self.build_expression(to_expression);
                 let by_expression_value_storage;
@@ -599,7 +599,7 @@ impl<'input> IRContext<'input> {
                 let label = self.generate_local(&label_type);
                 self.put_local(label.to_owned());
 
-                self.put_fetch(label.to_owned(), (variable_label, index_expression.to_owned()));
+                self.put_copy_from_pointer(label.to_owned(), (variable_label, index_expression.to_owned()));
 
                 label
             }
