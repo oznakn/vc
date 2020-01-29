@@ -37,18 +37,15 @@ pub struct Declaration<'input> {
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum ValueType {
-    Bool,
     Int,
     Real,
-    Char,
     Vector(Box<ValueType>, u64),
-    String,
+    String(u64),
 }
 
 impl ValueType {
     pub fn is_represents_bool(&self) -> bool {
         match self {
-            ValueType::Bool => true,
             ValueType::Int => true,
             _ => false,
         }
@@ -60,8 +57,6 @@ impl ValueType {
         }
 
         match self {
-            ValueType::Bool => v.eq(&ValueType::Char) || v.eq(&ValueType::Int),
-            ValueType::Char => v.eq(&ValueType::Int),
             ValueType::Int => v.eq(&ValueType::Real),
             _ => false,
         }
@@ -92,8 +87,7 @@ impl fmt::Display for ValueType {
             ValueType::Int => write!(f, "int"),
             ValueType::Real => write!(f, "real"),
             ValueType::Vector(value_type, size) => write!(f, "vector_{}_{}", value_type, size),
-            ValueType::String => write!(f, "string"),
-            _ => unimplemented!(),
+            ValueType::String(_) => write!(f, "string"),
         };
     }
 }
@@ -125,19 +119,9 @@ pub enum Expression<'input> {
     IntExpression(u64),
     RealExpression(f64),
     VariableExpression(VariableIdentifier<'input>),
-    FunctionCallExpression {
-        name: &'input str,
-        argument_list: Vec<Expression<'input>>,
-    },
-    UnaryExpression {
-        expression: Box<Expression<'input>>,
-        operator: UnaryOperator,
-    },
-    BinaryExpression {
-        left_expression: Box<Expression<'input>>,
-        right_expression: Box<Expression<'input>>,
-        operator: BinaryOperator,
-    },
+    FunctionCallExpression { name: &'input str, argument_list: Vec<Expression<'input>> },
+    UnaryExpression { expression: Box<Expression<'input>>, operator: UnaryOperator },
+    BinaryExpression { left_expression: Box<Expression<'input>>, right_expression: Box<Expression<'input>>, operator: BinaryOperator },
     Empty,
 }
 

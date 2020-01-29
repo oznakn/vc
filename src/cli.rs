@@ -17,13 +17,9 @@ fn print_error(err: CliError) {
 fn compile_command(matches: &clap::ArgMatches) -> Result<(), CliError> {
     let input_file = matches.value_of("input").unwrap();
 
-    let content = fs::read_to_string(input_file).map_err(|_| CliError {
-        error: format!("File not found: {}", input_file),
-    })?;
+    let content = fs::read_to_string(input_file).map_err(|_| CliError { error: format!("File not found: {}", input_file) })?;
 
-    let program = parser::parse(&content).map_err(|err| CliError {
-        error: format!("{}", err.to_string(&content)),
-    })?;
+    let program = parser::parse(&content).map_err(|err| CliError { error: format!("{}", err.to_string(&content)) })?;
 
     if matches.is_present("ast") {
         dbg!(&program);
@@ -47,9 +43,9 @@ fn compile_command(matches: &clap::ArgMatches) -> Result<(), CliError> {
         }
     }
 
-    let generated_code = codegen::riscv::CodeGenerator::build(&ir_context);
+    let generated_code = codegen::riscv64::CodeGenerator::build(&ir_context);
 
-    let assembly = codegen::riscv::convert_to_string(&generated_code);
+    let assembly = codegen::riscv64::convert_to_string(&generated_code);
 
     if matches.is_present("print") {
         println!("{}", assembly);

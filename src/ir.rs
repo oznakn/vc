@@ -46,14 +46,6 @@ impl<'input> fmt::Display for ConstValue<'input> {
 pub type Label = String;
 pub type VariablePointer = (ValueStorage, ValueStorage);
 
-pub fn fetch_value_type<'input>(ir_context: &'input IRContext<'input>, function: &Function, value_storage: &ValueStorage) -> ast::ValueType {
-    match value_storage {
-        ValueStorage::Local(_) => function.local_map.get(value_storage).unwrap().to_owned(),
-        ValueStorage::Var(_) => ir_context.var_map.get(value_storage).unwrap().to_owned(),
-        ValueStorage::Const(_) => ir_context.const_map.get(value_storage).unwrap().to_owned(),
-    }
-}
-
 #[derive(Clone, Debug)]
 pub enum Op {
     Add,
@@ -385,7 +377,7 @@ impl<'input> IRContext<'input> {
         if let Some(value_storage) = value_storage_option {
             let value_type = self.fetch_value_type(&value_storage);
 
-            return Some((value_storage, value_type));
+            return Some((value_storage, value_type.to_owned()));
         }
 
         None
@@ -394,7 +386,11 @@ impl<'input> IRContext<'input> {
     fn fetch_value_type(&self, value_storage: &ValueStorage) -> ast::ValueType {
         let current_function: &Function<'input> = self.function_map.get(self.current_function.unwrap()).unwrap();
 
-        return fetch_value_type(self, current_function, value_storage);
+        match value_storage {
+            ValueStorage::Local(_) => current_function.local_map.get(value_storage).unwrap().to_owned(),
+            ValueStorage::Var(_) => self.var_map.get(value_storage).unwrap().to_owned(),
+            ValueStorage::Const(_) => self.const_map.get(value_storage).unwrap().to_owned(),
+        }
     }
 
     fn build_statement(&mut self, ast_statement: &'input ast::Statement) {
@@ -568,10 +564,7 @@ impl<'input> IRContext<'input> {
 
     fn build_expression(&mut self, ast_expression: &'input ast::Expression<'input>) -> ValueStorage {
         match ast_expression {
-            ast::Expression::FunctionCallExpression {
-                name,
-                argument_list: argument_expression_list,
-            } => {
+            ast::Expression::FunctionCallExpression { name, argument_list: argument_expression_list } => {
                 let mut arguments = Vec::new();
                 let mut argument_types = Vec::new();
 
@@ -614,8 +607,8 @@ impl<'input> IRContext<'input> {
                 let mut operand1 = self.build_expression(left_expression);
                 let mut operand2 = self.build_expression(right_expression);
 
-                let operand1_type = self.fetch_value_type(&operand1);
-                let operand2_type = self.fetch_value_type(&operand1);
+                let operand1_type = self.fetch_value_type(&operand1).to_owned();
+                let operand2_type = self.fetch_value_type(&operand1).to_owned();
 
                 let mut result_type = operand1_type.clone();
 
@@ -748,7 +741,7 @@ impl<'input> IRContext<'input> {
             self.put_const(value_storage.to_owned(), ConstValue::String(s));
 
             self.string_map.insert(s, value_storage.to_owned());
-            self.const_map.insert(value_storage, ast::ValueType::String);
+            self.const_map.insert(value_storage, ast::ValueType::String(s.len() as u64));
         }
 
         for (k, v) in &self.symbol_table.ints {

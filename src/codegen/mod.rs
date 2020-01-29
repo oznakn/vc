@@ -1,1 +1,1 @@
-pub mod riscv;
+pub mod riscv64;

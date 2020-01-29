@@ -102,10 +102,7 @@ impl<'input> Lexer<'input> {
                 self.next_char();
             } else if self.curr_char() == '.' {
                 if dot_seen {
-                    return Err(LexicalError::InvalidChar {
-                        location: self.curr_location(),
-                        ch: self.curr_char(),
-                    });
+                    return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
                 }
 
                 pos += 1;
@@ -115,10 +112,7 @@ impl<'input> Lexer<'input> {
                 self.next_char();
             } else if self.curr_char() == 'E' || self.curr_char() == 'e' {
                 if !dot_seen || e_seen {
-                    return Err(LexicalError::InvalidChar {
-                        location: self.curr_location(),
-                        ch: self.curr_char(),
-                    });
+                    return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
                 }
 
                 e_seen = true;
@@ -128,10 +122,7 @@ impl<'input> Lexer<'input> {
                 self.next_char();
             } else if self.curr_char() == '+' || self.curr_char() == '-' {
                 if !dot_seen || !e_seen || e_sign_seen {
-                    return Err(LexicalError::InvalidChar {
-                        location: self.curr_location(),
-                        ch: self.curr_char(),
-                    });
+                    return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
                 }
 
                 if self.curr_char() == '-' {
@@ -169,10 +160,7 @@ impl<'input> Lexer<'input> {
         let mut pos = start;
 
         if self.curr_char() != '"' {
-            return Err(LexicalError::InvalidChar {
-                location: self.curr_location(),
-                ch: self.curr_char(),
-            });
+            return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
         }
         self.next_char();
 
@@ -180,10 +168,7 @@ impl<'input> Lexer<'input> {
             if self.curr_char() == '"' {
                 break;
             } else if self.is_breaking_whitespace() {
-                return Err(LexicalError::InvalidChar {
-                    location: self.curr_location(),
-                    ch: self.curr_char(),
-                });
+                return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
             } else if self.curr_char() == '\\' {
                 pos += 2;
 
@@ -197,10 +182,7 @@ impl<'input> Lexer<'input> {
         }
 
         if self.curr_char() != '"' {
-            return Err(LexicalError::InvalidChar {
-                location: self.curr_location(),
-                ch: self.curr_char(),
-            });
+            return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
         }
         self.next_char();
 
@@ -212,10 +194,7 @@ impl<'input> Lexer<'input> {
         let mut pos = start;
 
         if !self.curr_char().is_alphabetic() && self.curr_char() != '_' {
-            return Err(LexicalError::InvalidChar {
-                location: self.curr_location(),
-                ch: self.curr_char(),
-            });
+            return Err(LexicalError::InvalidChar { location: self.curr_location(), ch: self.curr_char() });
         }
 
         while self.has_char() {
