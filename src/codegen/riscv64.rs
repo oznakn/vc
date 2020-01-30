@@ -900,15 +900,18 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
             ir::IRItem::BinaryOp(storage, op, operand1, operand2) => {
                 let value_type1 = self.fetch_value_type(operand1);
                 let value_type2 = self.fetch_value_type(operand2);
+                let result_type = self.fetch_value_type(storage);
 
                 let result_register;
-                let mut middle_result_register_option: Option<Register> = None;
+                let middle_result_register;
 
                 if value_type1 == ast::ValueType::Real || value_type2 == ast::ValueType::Real {
-                    middle_result_register_option = Some(self.available_temporary_float_registers.pop_back().unwrap());
+                    middle_result_register = self.available_temporary_float_registers.pop_back().unwrap();
+                } else {
+                    middle_result_register = self.available_temporary_integer_registers.pop_back().unwrap();
                 }
 
-                if ((value_type1 == ast::ValueType::Real || value_type2 == ast::ValueType::Real) && (*op == ir::Op::Add || *op == ir::Op::Sub || *op == ir::Op::Mul)) || *op == ir::Op::Div {
+                if result_type == ast::ValueType::Real {
                     result_register = self.available_temporary_float_registers.pop_back().unwrap();
                 } else {
                     result_register = self.available_temporary_integer_registers.pop_back().unwrap();
@@ -931,12 +934,12 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                         self.items.push(Instruction::Div(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     ir::Op::Eq => {
-                        self.items.push(Instruction::Sub(middle_result_register_option.clone().unwrap(), register1.clone(), register2.clone()).into());
-                        self.items.push(Instruction::Seqz(result_register.clone(), middle_result_register_option.clone().unwrap()).into());
+                        self.items.push(Instruction::Sub(middle_result_register.clone(), register1.clone(), register2.clone()).into());
+                        self.items.push(Instruction::Seqz(result_register.clone(), middle_result_register.clone()).into());
                     }
                     ir::Op::NotEq => {
-                        self.items.push(Instruction::Sub(middle_result_register_option.clone().unwrap(), register1.clone(), register2.clone()).into());
-                        self.items.push(Instruction::Snez(result_register.clone(), middle_result_register_option.clone().unwrap()).into());
+                        self.items.push(Instruction::Sub(middle_result_register.clone(), register1.clone(), register2.clone()).into());
+                        self.items.push(Instruction::Snez(result_register.clone(), middle_result_register.clone()).into());
                     }
                     ir::Op::Greater => {
                         self.items.push(Instruction::Sgt(result_register.clone(), register1.clone(), register2.clone()).into());
@@ -970,9 +973,7 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                 self.recycle_register(register1);
                 self.recycle_register(register2);
 
-                if let Some(middle_result_register) = middle_result_register_option {
-                    self.recycle_register(middle_result_register);
-                }
+                self.recycle_register(middle_result_register);
 
                 self.store_to_value_storage(storage, result_register);
             }

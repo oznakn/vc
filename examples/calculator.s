@@ -180,10 +180,10 @@ _start:
 add:
         addi   sp, sp, -24
         sd     ra, 16(sp)
-        lw     t3, 12(sp)
-        lw     t4, 8(sp)
-        add    t2, t3, t4
-        sw     t2, 0(sp)
+        lw     t4, 12(sp)
+        lw     t5, 8(sp)
+        add    t3, t4, t5
+        sw     t3, 0(sp)
         lw     a0, 0(sp)
         ld     ra, 16(sp)
         addi   sp, sp, 24
@@ -192,9 +192,9 @@ add:
 sub:
         addi   sp, sp, -24
         sd     ra, 16(sp)
-        lw     t4, 12(sp)
-        lw     t3, 8(sp)
-        sub    t2, t4, t3
+        lw     t5, 12(sp)
+        lw     t4, 8(sp)
+        sub    t2, t5, t4
         sw     t2, 0(sp)
         lw     a0, 0(sp)
         ld     ra, 16(sp)
@@ -204,10 +204,10 @@ sub:
 mul:
         addi   sp, sp, -24
         sd     ra, 16(sp)
-        lw     t3, 12(sp)
-        lw     t4, 8(sp)
-        mul    t2, t3, t4
-        sw     t2, 0(sp)
+        lw     t4, 12(sp)
+        lw     t5, 8(sp)
+        mul    t3, t4, t5
+        sw     t3, 0(sp)
         lw     a0, 0(sp)
         ld     ra, 16(sp)
         addi   sp, sp, 24
@@ -216,10 +216,10 @@ mul:
 main:
         addi   sp, sp, -24
         sd     ra, 16(sp)
-        lw     t2, C2
-        sw     t2, -12(sp)
-        lw     t2, C3
-        sw     t2, -16(sp)
+        lw     t3, C2
+        sw     t3, -12(sp)
+        lw     t3, C3
+        sw     t3, -16(sp)
         call   add
         sw     a0, 8(sp)
         lw     a0, 8(sp)
