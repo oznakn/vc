@@ -1,9 +1,9 @@
 use std::collections::{HashMap, VecDeque};
-use std::fmt;
 
 use crate::ast;
 use crate::ir;
 use crate::MAIN_FUNCTION;
+use std::cmp::max;
 
 #[derive(Clone, Debug)]
 pub enum DataLocation {
@@ -12,12 +12,12 @@ pub enum DataLocation {
     Program(String),
 }
 
-impl fmt::Display for DataLocation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl DataLocation {
+    fn to_string(&self) -> String {
         match self {
-            DataLocation::Memory(offset) => write!(f, "{}(sp)", offset),
-            DataLocation::MemoryWithRegister(offset, register) => write!(f, "{}({})", offset, register),
-            DataLocation::Program(s) => write!(f, "{}", s),
+            DataLocation::Memory(offset) => format!("{}(sp)", offset),
+            DataLocation::MemoryWithRegister(offset, register) => format!("{}({})", offset, register.to_string()),
+            DataLocation::Program(s) => format!("{}", s),
         }
     }
 }
@@ -103,14 +103,17 @@ pub enum Register {
 impl Register {
     fn is_integer_register(&self) -> bool {
         match self {
-            Register::T0 | Register::T1 | Register::T2 | Register::T3 | Register::T4 | Register::T5 | Register::T6 => true,
+            Register::T0 | Register::T1 | Register::T2 | Register::T3 | Register::T4 | Register::T5 | Register::T6 |
+            Register::A0 | Register::A1 | Register::A2 | Register::A3 | Register::A4 | Register::A5 | Register::A6 | Register::A7 => true,
             _ => false,
         }
     }
 
     fn is_float_register(&self) -> bool {
         match self {
-            Register::FT0 | Register::FT1 | Register::FT2 | Register::FT3 | Register::FT4 | Register::FT5 | Register::FT6 | Register::FT7 | Register::FT8 | Register::FT9 | Register::FT10 | Register::FT11 => true,
+            Register::FT0 | Register::FT1 | Register::FT2 | Register::FT3 | Register::FT4 | Register::FT5 |
+            Register::FT6 | Register::FT7 | Register::FT8 | Register::FT9 | Register::FT10 | Register::FT11 |
+            Register::FA0 | Register::FA1 | Register::FA2 | Register::FA3 | Register::FA4 | Register::FA5 | Register::FA6 | Register::FA7=> true,
             _ => false,
         }
     }
@@ -121,84 +124,82 @@ impl Register {
             _ => self.is_float_register(),
         }
     }
-}
 
-impl fmt::Display for Register {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn to_string(&self) -> String {
         match self {
-            Register::X0 => write!(f, "x0"),
-            Register::RA => write!(f, "ra"),
-            Register::SP => write!(f, "sp"),
+            Register::X0 => "x0".to_owned(),
+            Register::RA => "ra".to_owned(),
+            Register::SP => "sp".to_owned(),
 
-            Register::T0 => write!(f, "t0"),
-            Register::T1 => write!(f, "t1"),
-            Register::T2 => write!(f, "t2"),
+            Register::T0 => "t0".to_owned(),
+            Register::T1 => "t1".to_owned(),
+            Register::T2 => "t2".to_owned(),
 
-            Register::S0 => write!(f, "s0"),
-            Register::S1 => write!(f, "s1"),
+            Register::S0 => "s0".to_owned(),
+            Register::S1 => "s1".to_owned(),
 
-            Register::A0 => write!(f, "a0"),
-            Register::A1 => write!(f, "a1"),
-            Register::A2 => write!(f, "a2"),
-            Register::A3 => write!(f, "a3"),
-            Register::A4 => write!(f, "a4"),
-            Register::A5 => write!(f, "a5"),
-            Register::A6 => write!(f, "a6"),
-            Register::A7 => write!(f, "a7"),
+            Register::A0 => "a0".to_owned(),
+            Register::A1 => "a1".to_owned(),
+            Register::A2 => "a2".to_owned(),
+            Register::A3 => "a3".to_owned(),
+            Register::A4 => "a4".to_owned(),
+            Register::A5 => "a5".to_owned(),
+            Register::A6 => "a6".to_owned(),
+            Register::A7 => "a7".to_owned(),
 
-            Register::S2 => write!(f, "s2"),
-            Register::S3 => write!(f, "s3"),
-            Register::S4 => write!(f, "s4"),
-            Register::S5 => write!(f, "s5"),
-            Register::S6 => write!(f, "s6"),
-            Register::S7 => write!(f, "s7"),
-            Register::S8 => write!(f, "s8"),
-            Register::S9 => write!(f, "s9"),
+            Register::S2 => "s2".to_owned(),
+            Register::S3 => "s3".to_owned(),
+            Register::S4 => "s4".to_owned(),
+            Register::S5 => "s5".to_owned(),
+            Register::S6 => "s6".to_owned(),
+            Register::S7 => "s7".to_owned(),
+            Register::S8 => "s8".to_owned(),
+            Register::S9 => "s9".to_owned(),
 
-            Register::S10 => write!(f, "s10"),
-            Register::S11 => write!(f, "s11"),
+            Register::S10 => "s10".to_owned(),
+            Register::S11 => "s11".to_owned(),
 
-            Register::T3 => write!(f, "t3"),
-            Register::T4 => write!(f, "t4"),
-            Register::T5 => write!(f, "t5"),
-            Register::T6 => write!(f, "t6"),
+            Register::T3 => "t3".to_owned(),
+            Register::T4 => "t4".to_owned(),
+            Register::T5 => "t5".to_owned(),
+            Register::T6 => "t6".to_owned(),
 
-            Register::FT0 => write!(f, "ft0"),
-            Register::FT1 => write!(f, "ft1"),
-            Register::FT2 => write!(f, "ft2"),
-            Register::FT3 => write!(f, "ft3"),
-            Register::FT4 => write!(f, "ft4"),
-            Register::FT5 => write!(f, "ft5"),
-            Register::FT6 => write!(f, "ft6"),
+            Register::FT0 => "ft0".to_owned(),
+            Register::FT1 => "ft1".to_owned(),
+            Register::FT2 => "ft2".to_owned(),
+            Register::FT3 => "ft3".to_owned(),
+            Register::FT4 => "ft4".to_owned(),
+            Register::FT5 => "ft5".to_owned(),
+            Register::FT6 => "ft6".to_owned(),
 
-            Register::FS0 => write!(f, "fs0"),
-            Register::FS1 => write!(f, "fs1"),
+            Register::FS0 => "fs0".to_owned(),
+            Register::FS1 => "fs1".to_owned(),
 
-            Register::FA0 => write!(f, "fa0"),
-            Register::FA1 => write!(f, "fa1"),
-            Register::FA2 => write!(f, "fa2"),
-            Register::FA3 => write!(f, "fa3"),
-            Register::FA4 => write!(f, "fa4"),
-            Register::FA5 => write!(f, "fa5"),
-            Register::FA6 => write!(f, "fa6"),
-            Register::FA7 => write!(f, "fa7"),
+            Register::FA0 => "fa0".to_owned(),
+            Register::FA1 => "fa1".to_owned(),
+            Register::FA2 => "fa2".to_owned(),
+            Register::FA3 => "fa3".to_owned(),
+            Register::FA4 => "fa4".to_owned(),
+            Register::FA5 => "fa5".to_owned(),
+            Register::FA6 => "fa6".to_owned(),
+            Register::FA7 => "fa7".to_owned(),
 
-            Register::FS2 => write!(f, "s2"),
-            Register::FS3 => write!(f, "s3"),
-            Register::FS4 => write!(f, "s4"),
-            Register::FS5 => write!(f, "s5"),
-            Register::FS6 => write!(f, "s6"),
-            Register::FS7 => write!(f, "s7"),
-            Register::FS8 => write!(f, "s8"),
-            Register::FS9 => write!(f, "s9"),
-            Register::FS10 => write!(f, "s10"),
-            Register::FS11 => write!(f, "s11"),
+            Register::FS2 => "s2".to_owned(),
+            Register::FS3 => "s3".to_owned(),
+            Register::FS4 => "s4".to_owned(),
+            Register::FS5 => "s5".to_owned(),
+            Register::FS6 => "s6".to_owned(),
+            Register::FS7 => "s7".to_owned(),
+            Register::FS8 => "s8".to_owned(),
+            Register::FS9 => "s9".to_owned(),
+            Register::FS10 => "s10".to_owned(),
+            Register::FS11 => "s11".to_owned(),
 
-            Register::FT7 => write!(f, "ft7"),
-            Register::FT8 => write!(f, "ft8"),
-            Register::FT9 => write!(f, "ft9"),
-            Register::FT10 => write!(f, "ft10"),
-            Register::FT11 => write!(f, "ft11"),
+            Register::FT7 => "ft7".to_owned(),
+            Register::FT8 => "ft8".to_owned(),
+            Register::FT9 => "ft9".to_owned(),
+            Register::FT10 => "ft10".to_owned(),
+            Register::FT11 => "ft11".to_owned(),
         }
     }
 }
@@ -234,6 +235,7 @@ pub enum Instruction {
     ConvertFFromI(Register, Register),
     ConvertFIromF(Register, Register),
 
+    FMv(Register, Register),
     FAdd(Register, Register, Register),
     FDiv(Register, Register, Register),
     FLoad(Register, DataLocation),
@@ -244,46 +246,54 @@ pub enum Instruction {
     FSlt(Register, Register, Register),
 }
 
-impl fmt::Display for Instruction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Instruction {
+    fn to_vector(&self) -> Vec<String> {
         match self {
-            Instruction::Jal(s) => write!(f, "jal {}", s),
-            Instruction::Jump(s) => write!(f, "j {}", s),
-            Instruction::Call(s) => write!(f, "call {}", s),
-            Instruction::Mv(x, y) => write!(f, "mv {}, {}", x, y),
-            Instruction::ECall() => write!(f, "ecall"),
-            Instruction::Ret() => write!(f, "ret"),
+            Instruction::Jal(s) => vec!["jal".to_owned(), s.to_owned()],
+            Instruction::Jump(s) => vec!["j".to_owned(), s.to_owned()],
+            Instruction::Call(s) => vec!["call".to_owned(), s.to_owned()],
+            Instruction::Mv(x, y) => vec!["mv".to_owned(), x.to_string(), y.to_string()],
+            Instruction::ECall() => vec!["ecall".to_owned()],
+            Instruction::Ret() => vec!["ret".to_owned()],
 
-            Instruction::Add(x, y, z) => write!(f, "add {}, {}, {}", x, y, z),
-            Instruction::AddI(x, y, z) => write!(f, "addi {}, {}, {}", x, y, z),
-            Instruction::And(x, y, z) => write!(f, "and {}, {}, {}", x, y, z),
-            Instruction::Beqz(x, y) => write!(f, "beqz {}, {}", x, y),
-            Instruction::Div(x, y, z) => write!(f, "div {}, {}, {}", x, y, z),
-            Instruction::Load(x, y) => write!(f, "lw {}, {}", x, y),
-            Instruction::LoadD(x, y) => write!(f, "ld {}, {}", x, y),
-            Instruction::LoadA(x, y) => write!(f, "la {}, {}", x, y),
-            Instruction::Mul(x, y, z) => write!(f, "mul {}, {}, {}", x, y, z),
-            Instruction::Or(x, y, z) => write!(f, "or {}, {}, {}", x, y, z),
-            Instruction::Store(x, y) => write!(f, "sw {}, {}", x, y),
-            Instruction::StoreD(x, y) => write!(f, "sd {}, {}", x, y),
-            Instruction::Sub(x, y, z) => write!(f, "sub {}, {}, {}", x, y, z),
-            Instruction::Seqz(x, y) => write!(f, "seqz {}, {}", x, y),
-            Instruction::Snez(x, y) => write!(f, "snez {}, {}", x, y),
-            Instruction::Sgt(x, y, z) => write!(f, "sgt {}, {}, {}", x, y, z),
-            Instruction::Slt(x, y, z) => write!(f, "slt {}, {}, {}", x, y, z),
-            Instruction::Rem(x, y, z) => write!(f, "rem {}, {}, {}", x, y, z),
+            Instruction::Add(x, y, z) => vec!["add".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::AddI(x, y, z) => vec!["addi".to_owned(), x.to_string(), y.to_string(), z.to_owned()],
+            Instruction::And(x, y, z) => vec!["and".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::Beqz(x, y) => vec!["beqz".to_owned(), x.to_string(), y.to_owned()],
+            Instruction::Div(x, y, z) => vec!["div".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::Load(x, y) => vec!["lw".to_owned(), x.to_string(), y.to_string()],
+            Instruction::LoadD(x, y) => vec!["ld".to_owned(), x.to_string(), y.to_string()],
+            Instruction::LoadA(x, y) => vec!["la".to_owned(), x.to_string(), y.to_string()],
+            Instruction::Mul(x, y, z) => vec!["mul".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::Or(x, y, z) => vec!["or".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::Store(x, y) => vec!["sw".to_owned(), x.to_string(), y.to_string()],
+            Instruction::StoreD(x, y) => vec!["sd".to_owned(), x.to_string(), y.to_string()],
+            Instruction::Sub(x, y, z) => vec!["sub".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::Seqz(x, y) => vec!["seqz".to_owned(), x.to_string(), y.to_string()],
+            Instruction::Snez(x, y) => vec!["snez".to_owned(), x.to_string(), y.to_string()],
+            Instruction::Sgt(x, y, z) => vec!["sgt".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::Slt(x, y, z) => vec!["slt".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::Rem(x, y, z) => vec!["rem".to_owned(), x.to_string(), y.to_string(), z.to_string()],
 
-            Instruction::ConvertFFromI(x, y) => write!(f, "fcvt.d.w {}, {}", x, y),
-            Instruction::ConvertFIromF(x, y) => write!(f, "fcvt.w.d {}, {}", x, y),
+            Instruction::ConvertFFromI(x, y) => vec!["fcvt.d.w".to_owned(), x.to_string(), y.to_string()],
+            Instruction::ConvertFIromF(x, y) => vec!["fcvt.w.d".to_owned(), x.to_string(), y.to_string()],
 
-            Instruction::FAdd(x, y, z) => write!(f, "fadd.d {}, {}, {}", x, y, z),
-            Instruction::FDiv(x, y, z) => write!(f, "fdiv.d {}, {}, {}", x, y, z),
-            Instruction::FLoad(x, y) => write!(f, "fld {}, {}", x, y),
-            Instruction::FMul(x, y, z) => write!(f, "fmul.d {}, {}, {}", x, y, z),
-            Instruction::FStore(x, y) => write!(f, "fsd {}, {}", x, y),
-            Instruction::FSub(x, y, z) => write!(f, "fsub.d {}, {}, {}", x, y, z),
-            Instruction::FSgt(x, y, z) => write!(f, "fgt.d {}, {}, {}", x, y, z),
-            Instruction::FSlt(x, y, z) => write!(f, "flt.d {}, {}, {}", x, y, z),
+            Instruction::FMv(x, y) => vec!["fmv".to_owned(), x.to_string(), y.to_string()],
+            Instruction::FAdd(x, y, z) => vec!["fadd.d".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::FDiv(x, y, z) => vec!["fdiv.d".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::FLoad(x, y) => {
+                match y {
+                    DataLocation::Program(_) => {
+                        vec!["fld".to_owned(), x.to_string(), y.to_string(), "s0".to_owned()]
+                    }
+                    _ => vec!["fld".to_owned(), x.to_string(), y.to_string()]
+                }
+            }
+            Instruction::FMul(x, y, z) => vec!["fmul.d".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::FStore(x, y) => vec!["fsd".to_owned(), x.to_string(), y.to_string()],
+            Instruction::FSub(x, y, z) => vec!["fsub.d".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::FSgt(x, y, z) => vec!["fgt.d".to_owned(), x.to_string(), y.to_string(), z.to_string()],
+            Instruction::FSlt(x, y, z) => vec!["flt.d".to_owned(), x.to_string(), y.to_string(), z.to_string()],
         }
     }
 }
@@ -297,14 +307,14 @@ pub enum DataSectionItem {
     Zero(DataLocation, String),
 }
 
-impl fmt::Display for DataSectionItem {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl DataSectionItem {
+    fn to_vector(&self) -> Vec<String> {
         match self {
-            DataSectionItem::String(data_location, s) => write!(f, "{}: .string {}", data_location, s),
-            DataSectionItem::Word(data_location, s) => write!(f, "{}: .word {}", data_location, s),
-            DataSectionItem::Double(data_location, s) => write!(f, "{}: .double {}", data_location, s),
-            DataSectionItem::Byte(data_location, s) => write!(f, "{}: .byte {}", data_location, s),
-            DataSectionItem::Zero(data_location, s) => write!(f, "{}: .zero {}", data_location, s),
+            DataSectionItem::String(data_location, s) => vec![format!("{}:", data_location.to_string()), ".string".to_owned(), s.to_owned()],
+            DataSectionItem::Word(data_location, s) => vec![format!("{}:", data_location.to_string()), ".word".to_owned(), s.to_owned()],
+            DataSectionItem::Double(data_location, s) => vec![format!("{}:", data_location.to_string()), ".double".to_owned(), s.to_owned()],
+            DataSectionItem::Byte(data_location, s) => vec![format!("{}:", data_location.to_string()), ".byte".to_owned(), s.to_owned()],
+            DataSectionItem::Zero(data_location, s) => vec![format!("{}:", data_location.to_string()), ".zero".to_owned(), s.to_owned()],
         }
     }
 }
@@ -319,15 +329,15 @@ pub enum GeneratedCodeItem {
     Raw(String),
 }
 
-impl fmt::Display for GeneratedCodeItem {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl GeneratedCodeItem {
+    fn to_vector(&self) -> Vec<String> {
         match self {
-            GeneratedCodeItem::Global(s) => write!(f, ".global {}", s),
-            GeneratedCodeItem::Section(s) => write!(f, ".section {}", s),
-            GeneratedCodeItem::Label(s) => write!(f, "{}:", s),
-            GeneratedCodeItem::DataSectionItem(i) => write!(f, "{}{}", " ".repeat(4), i),
-            GeneratedCodeItem::Instruction(i) => write!(f, "{}{}", " ".repeat(4), i),
-            GeneratedCodeItem::Raw(s) => write!(f, "{}", s),
+            GeneratedCodeItem::Global(s) => vec![".global".to_owned(), s.to_owned()],
+            GeneratedCodeItem::Section(s) => vec![".section".to_owned(), format!(".{}", s)],
+            GeneratedCodeItem::Label(s) => vec![format!("{}:", s)],
+            GeneratedCodeItem::DataSectionItem(i) => i.to_vector(),
+            GeneratedCodeItem::Instruction(i) => i.to_vector(),
+            GeneratedCodeItem::Raw(s) => vec![s.clone()],
         }
     }
 }
@@ -638,14 +648,14 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
 
     fn check_data_section(&mut self) {
         if !self.is_data_section_started {
-            self.items.push(GeneratedCodeItem::Section(".data".to_string()));
+            self.items.push(GeneratedCodeItem::Section("data".to_string()));
             self.is_data_section_started = true;
         }
     }
 
     fn check_text_section(&mut self) {
         if !self.is_text_section_started {
-            self.items.push(GeneratedCodeItem::Section(".text".to_string()));
+            self.items.push(GeneratedCodeItem::Section("text".to_string()));
             self.items.push(GeneratedCodeItem::Raw(PRINT_INTEGER_CODE.to_owned()));
             self.items.push(GeneratedCodeItem::Raw(PRINT_REAL_CODE.to_owned()));
             self.is_text_section_started = true;
@@ -1044,6 +1054,15 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
         for item in &self.items {
             match item {
                 GeneratedCodeItem::Instruction(instruction) => match instruction {
+                    Instruction::Mv(x, y) => {
+                        if x.is_float_register() && y.is_float_register() {
+                            new_items.push(Instruction::FMv(x.clone(), y.clone()).into());
+                        } else if x.is_integer_register() && y.is_integer_register() {
+                            new_items.push(instruction.clone().into());
+                        } else {
+                            unimplemented!()
+                        }
+                    }
                     Instruction::Add(x, y, z) => {
                         if x.is_float_register() {
                             let mut operand1 = y.clone();
@@ -1103,12 +1122,12 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                         }
                     }
                     Instruction::Load(register, data_location) => {
-                        if register.is_integer_register() {
-                            new_items.push(Instruction::Load(register.clone(), data_location.clone()).into());
-                        } else if register.is_float_register() {
+                        if register.is_float_register() {
                             new_items.push(Instruction::FLoad(register.clone(), data_location.clone()).into());
                         } else if register.is_full_width_register() {
                             new_items.push(Instruction::LoadD(register.clone(), data_location.clone()).into());
+                        } else {
+                            new_items.push(instruction.clone().into());
                         }
                     }
                     Instruction::Mul(x, y, z) => {
@@ -1200,4 +1219,58 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
 
         return items;
     }
+}
+
+pub fn convert_generated_code_to_assembly(generated_code: &Vec<GeneratedCodeItem>) -> String {
+    let mut max_instruction_length = 0;
+
+    for generated_code_item in generated_code {
+        match generated_code_item {
+            GeneratedCodeItem::Instruction(_) => {
+                let items = generated_code_item.to_vector();
+
+                let len = items.get(0).unwrap().len();
+
+                if len > max_instruction_length {
+                    max_instruction_length = len;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    generated_code
+        .iter()
+        .map(|generated_code_item| {
+            match generated_code_item {
+                GeneratedCodeItem::Section(_) | GeneratedCodeItem::Label(_) => {
+                    "\n".to_owned() + &generated_code_item.to_vector().join(" ")
+                }
+                GeneratedCodeItem::Instruction(_) => {
+                    let items = generated_code_item.to_vector();
+                    let first_item = items.get(0).unwrap();
+
+                    " ".repeat(8) +
+                        first_item +
+                        " ".repeat(max(2, max_instruction_length - first_item.len() + 2)).as_str() +
+                        items[1..].join(", ").as_str()
+                }
+                GeneratedCodeItem::DataSectionItem(_) => {
+                    let mut s = String::new();
+
+                    let items = generated_code_item.to_vector();
+
+                    s += items.get(0).unwrap();
+                    s += "\n";
+                    s += " ".repeat(8).as_str();
+
+                    s += &items[1..].join(" ");
+
+                    s
+                }
+                _ => generated_code_item.to_vector().join(" ")
+            }
+        })
+        .collect::<Vec<String>>()
+        .join("\n") + "\n"
 }

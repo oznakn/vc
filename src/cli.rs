@@ -45,7 +45,7 @@ fn compile_command(matches: &clap::ArgMatches) -> Result<(), CliError> {
 
     let generated_code = codegen::riscv64::CodeGenerator::build(&ir_context);
 
-    let assembly = generated_code.iter().map(|item| format!("{}", item)).collect::<Vec<String>>().join("\n") + "\n";
+    let assembly = codegen::riscv64::convert_generated_code_to_assembly(&generated_code);
 
     if matches.is_present("print") {
         println!("{}", assembly);
