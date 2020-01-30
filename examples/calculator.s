@@ -1,35 +1,32 @@
 .global _start
 
-
 .section .rodata
 __F10:
-        .double     10.0000
+        .double 10.0000
 C0:
-        .string     "\n"
+        .string " "
 C1:
-        .string     " "
+        .string "\n"
 C2:
-        .word       2
+        .word 2
 C3:
-        .word       0
+        .word 4
 C4:
-        .word       230
+        .word 12
 C5:
-        .word       12
+        .word 10
 C6:
-        .word       3
+        .word 3
 C7:
-        .word       4
+        .word 230
 C8:
-        .word       1
+        .word 0
 C9:
-        .word       10
+        .word 1
 C10:
-        .double     1.0000
-
+        .double 1.0000
 
 .section .text
-
 
 .print_int:
         mv          t0, a0
@@ -82,8 +79,6 @@ C10:
 .print_int__4:
         addi        sp, sp, 58
         ret
-
-
 
 
 .print_real:
@@ -177,87 +172,90 @@ C10:
 
 
 _start:
-        jal         ra, main
-        lw          a0, -4(sp)
-        addi        a7, x0, 93
-        ecall       
-add:
-        addi        sp, sp, -24
-        sd          ra, 16(sp)
-        lw          t1, 12(sp)
-        lw          t2, 8(sp)
-        addw        t0, t1, t2
-        sw          t0, 0(sp)
-        lw          a0, 0(sp)
-        ld          ra, 16(sp)
-        addi        sp, sp, 24
-        ret         
-sub:
-        addi        sp, sp, -24
-        sd          ra, 16(sp)
-        lw          t1, 12(sp)
-        lw          t2, 8(sp)
-        subw        t0, t1, t2
-        sw          t0, 0(sp)
-        lw          a0, 0(sp)
-        ld          ra, 16(sp)
-        addi        sp, sp, 24
-        ret         
-mul:
-        addi        sp, sp, -24
-        sd          ra, 16(sp)
-        lw          t1, 12(sp)
-        lw          t2, 8(sp)
-        mulw        t0, t1, t2
-        sw          t0, 0(sp)
-        lw          a0, 0(sp)
-        ld          ra, 16(sp)
-        addi        sp, sp, 24
-        ret         
-main:
-        addi        sp, sp, -24
-        sd          ra, 16(sp)
-        lw          a0, C2
-        sw          a0, -12(sp)
-        lw          a0, C7
-        sw          a0, -16(sp)
-        call        add
-        sw          a0, 8(sp)
-        lw          a0, 8(sp)
-        call        .print_int
-        addi        a0, x0, 1
-        la          a1, C0
-        addi        a2, x0, 1
-        addi        a7, x0, 64
-        ecall       
-        lw          a0, C5
-        sw          a0, -12(sp)
-        lw          a0, C9
-        sw          a0, -16(sp)
-        call        sub
-        sw          a0, 4(sp)
-        lw          a0, 4(sp)
-        call        .print_int
-        addi        a0, x0, 1
-        la          a1, C0
-        addi        a2, x0, 1
-        addi        a7, x0, 64
-        ecall       
-        lw          a0, C6
-        sw          a0, -12(sp)
-        lw          a0, C4
-        sw          a0, -16(sp)
-        call        mul
-        sw          a0, 0(sp)
-        lw          a0, 0(sp)
-        call        .print_int
-        addi        a0, x0, 1
-        la          a1, C0
-        addi        a2, x0, 1
-        addi        a7, x0, 64
-        ecall       
-        lw          a0, C3
-        ld          ra, 16(sp)
-        addi        sp, sp, 24
-        ret         
+        jal    main
+        lw     a0, -4(sp)
+        addi   a7, x0, 93
+        ecall  
 
+add:
+        addi   sp, sp, -24
+        sd     ra, 16(sp)
+        lw     t3, 12(sp)
+        lw     t4, 8(sp)
+        add    t2, t3, t4
+        sw     t2, 0(sp)
+        lw     a0, 0(sp)
+        ld     ra, 16(sp)
+        addi   sp, sp, 24
+        ret    
+
+sub:
+        addi   sp, sp, -24
+        sd     ra, 16(sp)
+        lw     t4, 12(sp)
+        lw     t3, 8(sp)
+        sub    t2, t4, t3
+        sw     t2, 0(sp)
+        lw     a0, 0(sp)
+        ld     ra, 16(sp)
+        addi   sp, sp, 24
+        ret    
+
+mul:
+        addi   sp, sp, -24
+        sd     ra, 16(sp)
+        lw     t3, 12(sp)
+        lw     t4, 8(sp)
+        mul    t2, t3, t4
+        sw     t2, 0(sp)
+        lw     a0, 0(sp)
+        ld     ra, 16(sp)
+        addi   sp, sp, 24
+        ret    
+
+main:
+        addi   sp, sp, -24
+        sd     ra, 16(sp)
+        lw     t2, C2
+        sw     t2, -12(sp)
+        lw     t2, C3
+        sw     t2, -16(sp)
+        call   add
+        sw     a0, 8(sp)
+        lw     a0, 8(sp)
+        call   .print_int
+        addi   a0, x0, 1
+        la     a1, C1
+        addi   a2, x0, 2
+        addi   a7, x0, 64
+        ecall  
+        lw     a0, C4
+        sw     a0, -12(sp)
+        lw     a0, C5
+        sw     a0, -16(sp)
+        call   sub
+        sw     a0, 4(sp)
+        lw     a0, 4(sp)
+        call   .print_int
+        addi   a0, x0, 1
+        la     a1, C1
+        addi   a2, x0, 2
+        addi   a7, x0, 64
+        ecall  
+        lw     a0, C6
+        sw     a0, -12(sp)
+        lw     a0, C7
+        sw     a0, -16(sp)
+        call   mul
+        sw     a0, 0(sp)
+        lw     a0, 0(sp)
+        call   .print_int
+        addi   a0, x0, 1
+        la     a1, C1
+        addi   a2, x0, 2
+        addi   a7, x0, 64
+        ecall  
+        lw     a0, C8
+        ld     ra, 16(sp)
+        addi   sp, sp, 24
+        ret    

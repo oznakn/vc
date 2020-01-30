@@ -104,7 +104,7 @@ pub enum IRItem<'input> {
     CopyFromPointer(ValueStorage, VariablePointer),
     Bz(Label, ValueStorage),
     Var(ValueStorage),
-    Cast(ValueStorage, ValueStorage),
+    Promote(ValueStorage, ValueStorage),
     BinaryOp(ValueStorage, Op, ValueStorage, ValueStorage),
     UnaryOp(ValueStorage, Op, ValueStorage),
     Print(ValueStorage),
@@ -129,7 +129,7 @@ impl<'input> fmt::Display for IRItem<'input> {
             IRItem::CopyFromPointer(to, from) => write!(f, "store({}[{}], {})", to, &from.0, &from.1),
             IRItem::Bz(label, value_storage) => write!(f, "bz({}, {})", label, value_storage),
             IRItem::Var(value_storage) => write!(f, "var({})", value_storage),
-            IRItem::Cast(to, from) => write!(f, "promote({}, {})", to, from),
+            IRItem::Promote(to, from) => write!(f, "promote({}, {})", to, from),
             IRItem::BinaryOp(target, op, operand1, operand2) => write!(f, "binary_op({}, {}, {}, {})", target, op, operand1, operand2),
             IRItem::UnaryOp(target, op, operand) => write!(f, "unary_op({}, {}, {})", target, op, operand),
             IRItem::Print(label) => write!(f, "print({})", label),
@@ -207,21 +207,15 @@ impl<'input> IRContext<'input> {
 
     fn generate_label(&mut self, suffix: u64) -> Label {
         let prefix = self.current_function.unwrap();
-        let label;
-
-        if suffix == 0 {
-            label = prefix.to_string();
-        } else {
-            label = format!("{}__{}", prefix, suffix);
-        }
+        let label = format!("{}__{}", prefix, suffix);
 
         if let Some(_) = self.labels.get(&label) {
             return self.generate_label(suffix + 1);
-        } else {
-            self.labels.insert(label.clone());
         }
 
-        return label;
+        self.labels.insert(label.clone());
+
+        label
     }
 
     #[inline]
@@ -304,8 +298,8 @@ impl<'input> IRContext<'input> {
     }
 
     #[inline]
-    fn put_cast(&mut self, to: ValueStorage, from: ValueStorage) {
-        self.items.push(IRItem::Cast(to, from));
+    fn put_promote(&mut self, to: ValueStorage, from: ValueStorage) {
+        self.items.push(IRItem::Promote(to, from));
     }
 
     #[inline]
@@ -401,11 +395,11 @@ impl<'input> IRContext<'input> {
 
                 let (variable_value_storage, variable_value_type) = self.fetch_variable(variable.name).unwrap();
 
-                if expression_value_type.requires_cast(&variable_value_type) {
+                if expression_value_type.requires_promote(&variable_value_type) {
                     let temp = self.generate_local(&variable_value_type);
                     self.put_local(temp.to_owned());
 
-                    self.put_cast(temp.to_owned(), expression_value_storage);
+                    self.put_promote(temp.to_owned(), expression_value_storage);
 
                     expression_value_storage = temp;
                 }
@@ -608,9 +602,9 @@ impl<'input> IRContext<'input> {
                 let mut operand2 = self.build_expression(right_expression);
 
                 let operand1_type = self.fetch_value_type(&operand1).to_owned();
-                let operand2_type = self.fetch_value_type(&operand1).to_owned();
+                let operand2_type = self.fetch_value_type(&operand2).to_owned();
 
-                let mut result_type = operand1_type.clone();
+                let result_type;
 
                 if *operator == ast::BinaryOperator::And
                     || *operator == ast::BinaryOperator::Or
@@ -625,24 +619,26 @@ impl<'input> IRContext<'input> {
                     result_type = ast::ValueType::Int;
                 } else if *operator == ast::BinaryOperator::Division {
                     result_type = ast::ValueType::Real;
+                } else if operand1_type == ast::ValueType::Real || operand2_type == ast::ValueType::Real {
+                    result_type = ast::ValueType::Real;
+                } else {
+                    result_type = ast::ValueType::Int;
                 }
 
                 if operand1_type == ast::ValueType::Int && operand2_type == ast::ValueType::Real {
                     let temp = self.generate_local(&ast::ValueType::Real);
                     self.put_local(temp.to_owned());
 
-                    self.put_cast(temp.to_owned(), operand1.to_owned());
+                    self.put_promote(temp.to_owned(), operand1.to_owned());
 
                     operand1 = temp;
-                    result_type = ast::ValueType::Real;
                 } else if operand1_type == ast::ValueType::Real && operand2_type == ast::ValueType::Int {
                     let temp = self.generate_local(&ast::ValueType::Real);
                     self.put_local(temp.to_owned());
 
-                    self.put_cast(temp.to_owned(), operand2.to_owned());
+                    self.put_promote(temp.to_owned(), operand2.to_owned());
 
                     operand2 = temp;
-                    result_type = ast::ValueType::Real;
                 }
 
                 let result_local = self.generate_local(&result_type);

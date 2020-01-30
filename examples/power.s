@@ -1,33 +1,26 @@
 .global _start
 
-
 .section .rodata
 __F10:
-        .double     10.0000
+        .double 10.0000
 C0:
-        .string     " "
+        .string " "
 C1:
-        .string     "\n"
+        .string "\n"
 C2:
-        .word       10
+        .word 1
 C3:
-        .word       1
+        .word 3
 C4:
-        .word       2
+        .word 2
 C5:
-        .word       0
+        .word 0
 C6:
-        .word       3
+        .double 1.0000
 C7:
-        .word       8
-C8:
-        .word       4
-C9:
-        .double     1.0000
-
+        .double 1.0000
 
 .section .text
-
 
 .print_int:
         mv          t0, a0
@@ -80,8 +73,6 @@ C9:
 .print_int__4:
         addi        sp, sp, 58
         ret
-
-
 
 
 .print_real:
@@ -175,111 +166,72 @@ C9:
 
 
 _start:
-        jal         ra, main
-        lw          a0, -4(sp)
-        addi        a7, x0, 93
-        ecall       
-p:
-        addi        sp, sp, -36
-        sd          ra, 28(sp)
-        lw          t0, C3
-        sw          t0, 12(sp)
-        lw          t0, C3
-        sw          t0, 8(sp)
-p__1:
-        lw          t1, 8(sp)
-        lw          t2, 20(sp)
-        sgt         t0, t1, t2
-        seqz        t0, t0
-        sw          t0, 4(sp)
-        lw          t0, 4(sp)
-        beqz        t0, p__2
-        lw          t1, 24(sp)
-        lw          t2, 12(sp)
-        mulw        t0, t1, t2
-        sw          t0, 0(sp)
-        lw          t0, 0(sp)
-        sw          t0, 12(sp)
-        lw          t1, 8(sp)
-        lw          t2, C3
-        addw        t0, t1, t2
-        sw          t0, 8(sp)
-        j           p__1
-p__2:
-        lw          a0, 12(sp)
-        ld          ra, 28(sp)
-        addi        sp, sp, 36
-        ret         
-main:
-        addi        sp, sp, -32
-        sd          ra, 24(sp)
-        lw          a0, C6
-        sw          a0, -12(sp)
-        lw          a0, C4
-        sw          a0, -16(sp)
-        call        p
-        sw          a0, 16(sp)
-        lw          a0, 16(sp)
-        call        .print_int
-        addi        a0, x0, 1
-        la          a1, C1
-        addi        a2, x0, 1
-        addi        a7, x0, 64
-        ecall       
-        lw          a0, C2
-        sw          a0, -12(sp)
-        lw          a0, C4
-        sw          a0, -16(sp)
-        call        p
-        sw          a0, 12(sp)
-        lw          a0, 12(sp)
-        call        .print_int
-        addi        a0, x0, 1
-        la          a1, C1
-        addi        a2, x0, 1
-        addi        a7, x0, 64
-        ecall       
-        lw          a0, C6
-        sw          a0, -12(sp)
-        lw          a0, C8
-        sw          a0, -16(sp)
-        call        p
-        sw          a0, 8(sp)
-        lw          a0, 8(sp)
-        call        .print_int
-        addi        a0, x0, 1
-        la          a1, C1
-        addi        a2, x0, 1
-        addi        a7, x0, 64
-        ecall       
-        lw          a0, C4
-        sw          a0, -12(sp)
-        lw          a0, C7
-        sw          a0, -16(sp)
-        call        p
-        sw          a0, 4(sp)
-        lw          a0, 4(sp)
-        call        .print_int
-        addi        a0, x0, 1
-        la          a1, C1
-        addi        a2, x0, 1
-        addi        a7, x0, 64
-        ecall       
-        lw          a0, C8
-        sw          a0, -12(sp)
-        lw          a0, C6
-        sw          a0, -16(sp)
-        call        p
-        sw          a0, 0(sp)
-        lw          a0, 0(sp)
-        call        .print_int
-        addi        a0, x0, 1
-        la          a1, C1
-        addi        a2, x0, 1
-        addi        a7, x0, 64
-        ecall       
-        lw          a0, C5
-        ld          ra, 24(sp)
-        addi        sp, sp, 32
-        ret         
+        jal       main
+        lw        a0, -4(sp)
+        addi      a7, x0, 93
+        ecall     
 
+p:
+        addi      sp, sp, -56
+        sd        ra, 48(sp)
+        fld       ft2, C6, s0
+        fsd       ft2, 24(sp)
+        lw        t2, C2
+        sw        t2, 20(sp)
+
+p__0:
+        lw        t3, 20(sp)
+        lw        t4, 40(sp)
+        sgt       t2, t3, t4
+        seqz      t2, t2
+        sw        t2, 16(sp)
+        lw        t2, 16(sp)
+        beqz      t2, p__1
+        lw        t4, 44(sp)
+        fcvt.d.w  ft2, t4
+        fsd       ft2, 8(sp)
+        fld       ft4, 8(sp)
+        fld       ft5, 24(sp)
+        fmul.d    ft3, ft4, ft5
+        fsd       ft3, 0(sp)
+        fld       ft3, 0(sp)
+        fsd       ft3, 24(sp)
+        fld       fa0, 24(sp)
+        call      .print_real
+        addi      a0, x0, 1
+        la        a1, C1
+        addi      a2, x0, 2
+        addi      a7, x0, 64
+        ecall     
+        lw        t5, 20(sp)
+        lw        t6, C2
+        add       t3, t5, t6
+        sw        t3, 20(sp)
+        j         p__0
+
+p__1:
+        fld       fa0, 24(sp)
+        ld        ra, 48(sp)
+        addi      sp, sp, 56
+        ret       
+
+main:
+        addi      sp, sp, -20
+        sd        ra, 12(sp)
+        lw        t3, C3
+        sw        t3, -12(sp)
+        lw        t3, C4
+        sw        t3, -16(sp)
+        call      p
+        fsd       fa0, 0(sp)
+        fld       fa0, 0(sp)
+        call      .print_real
+        addi      a0, x0, 1
+        la        a1, C1
+        addi      a2, x0, 2
+        addi      a7, x0, 64
+        ecall     
+        lw        a0, C5
+        ld        ra, 12(sp)
+        addi      sp, sp, 20
+        ret       

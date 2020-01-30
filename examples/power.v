@@ -1,10 +1,11 @@
-int func p(base: int, pow: int)
-    var p: int, i: int;
+real func p(base: int, pow: int)
+    var p: real, i: int;
 
-    p := 1;
+    p := 1.0;
 
     for i := 1 to pow by 1
         p := base * p;
+        print p;
     endfor;
 
     return p;
@@ -12,10 +13,6 @@ endfunc
 
 int func main()
     print p(3, 2);
-    print p(10, 2);
-    print p(3, 4);
-    print p(2, 8);
-    print p(4, 3);
 
     return 0;
 endfunc

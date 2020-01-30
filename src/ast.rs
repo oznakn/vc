@@ -62,7 +62,7 @@ impl ValueType {
         }
     }
 
-    pub fn requires_cast(&self, v: &ValueType) -> bool {
+    pub fn requires_promote(&self, v: &ValueType) -> bool {
         self.is_fits_into(v) && !self.eq(v)
     }
 

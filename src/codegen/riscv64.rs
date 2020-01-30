@@ -104,7 +104,8 @@ impl Register {
     fn is_integer_register(&self) -> bool {
         match self {
             Register::T0 | Register::T1 | Register::T2 | Register::T3 | Register::T4 | Register::T5 | Register::T6 |
-            Register::A0 | Register::A1 | Register::A2 | Register::A3 | Register::A4 | Register::A5 | Register::A6 | Register::A7 => true,
+            Register::A0 | Register::A1 | Register::A2 | Register::A3 | Register::A4 | Register::A5 | Register::A6 | Register::A7 |
+            Register::S0 | Register::S1 | Register::S2 | Register::S3 | Register::S4 | Register::S5 | Register::S6 | Register::S7 => true,
             _ => false,
         }
     }
@@ -113,7 +114,8 @@ impl Register {
         match self {
             Register::FT0 | Register::FT1 | Register::FT2 | Register::FT3 | Register::FT4 | Register::FT5 |
             Register::FT6 | Register::FT7 | Register::FT8 | Register::FT9 | Register::FT10 | Register::FT11 |
-            Register::FA0 | Register::FA1 | Register::FA2 | Register::FA3 | Register::FA4 | Register::FA5 | Register::FA6 | Register::FA7=> true,
+            Register::FA0 | Register::FA1 | Register::FA2 | Register::FA3 | Register::FA4 | Register::FA5 | Register::FA6 | Register::FA7 |
+            Register::FS0 | Register::FS1 | Register::FS2 | Register::FS3 | Register::FS4 | Register::FS5 | Register::FS6 | Register::FS7 => true,
             _ => false,
         }
     }
@@ -540,12 +542,20 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
         };
 
         // T0, T1 and FT0, FT1 reserved for i to f and f to i convert operations
+        // S0 reserved for fld temp register, do not use FS0
 
         generator.available_temporary_integer_registers.push_front(Register::T2);
         generator.available_temporary_integer_registers.push_front(Register::T3);
         generator.available_temporary_integer_registers.push_front(Register::T4);
         generator.available_temporary_integer_registers.push_front(Register::T5);
         generator.available_temporary_integer_registers.push_front(Register::T6);
+        generator.available_temporary_integer_registers.push_front(Register::S1);
+        generator.available_temporary_integer_registers.push_front(Register::S2);
+        generator.available_temporary_integer_registers.push_front(Register::S3);
+        generator.available_temporary_integer_registers.push_front(Register::S4);
+        generator.available_temporary_integer_registers.push_front(Register::S5);
+        generator.available_temporary_integer_registers.push_front(Register::S6);
+        generator.available_temporary_integer_registers.push_front(Register::S7);
 
         generator.available_temporary_float_registers.push_front(Register::FT2);
         generator.available_temporary_float_registers.push_front(Register::FT3);
@@ -557,16 +567,22 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
         generator.available_temporary_float_registers.push_front(Register::FT9);
         generator.available_temporary_float_registers.push_front(Register::FT10);
         generator.available_temporary_float_registers.push_front(Register::FT11);
+        generator.available_temporary_integer_registers.push_front(Register::FS1);
+        generator.available_temporary_integer_registers.push_front(Register::FS2);
+        generator.available_temporary_integer_registers.push_front(Register::FS3);
+        generator.available_temporary_integer_registers.push_front(Register::FS4);
+        generator.available_temporary_integer_registers.push_front(Register::FS5);
+        generator.available_temporary_integer_registers.push_front(Register::FS6);
+        generator.available_temporary_integer_registers.push_front(Register::FS7);
 
         generator
     }
 
     fn recycle_register(&mut self, register: Register) {
-        match register {
-            Register::T0 | Register::T1 | Register::T2 | Register::T3 | Register::T4 | Register::T5 | Register::T6 => self.available_temporary_integer_registers.push_back(register),
-
-            Register::FT0 | Register::FT1 | Register::FT2 | Register::FT3 | Register::FT4 | Register::FT5 | Register::FT6 | Register::FT7 | Register::FT8 | Register::FT9 | Register::FT10 | Register::FT11 => self.available_temporary_float_registers.push_back(register),
-            _ => unreachable!(),
+        if register.is_integer_register() {
+            self.available_temporary_integer_registers.push_back(register)
+        } else if register.is_float_register() {
+            self.available_temporary_float_registers.push_back(register)
         }
     }
 
@@ -873,7 +889,7 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                 let register = self.load_value_storage(s);
                 self.items.push(Instruction::Beqz(register, label.to_owned()).into());
             }
-            ir::IRItem::Cast(to, from) => {
+            ir::IRItem::Promote(to, from) => {
                 let register = self.load_value_storage(from);
                 let result_register = self.available_temporary_float_registers.pop_back().unwrap();
 
@@ -886,10 +902,10 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                 let value_type2 = self.fetch_value_type(operand2);
 
                 let result_register;
-                let mut middle_result_register: Option<Register> = None;
+                let mut middle_result_register_option: Option<Register> = None;
 
                 if value_type1 == ast::ValueType::Real || value_type2 == ast::ValueType::Real {
-                    middle_result_register = Some(self.available_temporary_float_registers.pop_back().unwrap());
+                    middle_result_register_option = Some(self.available_temporary_float_registers.pop_back().unwrap());
                 }
 
                 if ((value_type1 == ast::ValueType::Real || value_type2 == ast::ValueType::Real) && (*op == ir::Op::Add || *op == ir::Op::Sub || *op == ir::Op::Mul)) || *op == ir::Op::Div {
@@ -903,52 +919,59 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
 
                 match op {
                     ir::Op::Add => {
-                        self.items.push(Instruction::Add(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Add(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     ir::Op::Sub => {
-                        self.items.push(Instruction::Sub(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Sub(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     ir::Op::Mul => {
-                        self.items.push(Instruction::Mul(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Mul(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     ir::Op::Div => {
-                        self.items.push(Instruction::Div(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Div(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     ir::Op::Eq => {
-                        self.items.push(Instruction::Sub(middle_result_register.clone().unwrap(), register1, register2).into());
-                        self.items.push(Instruction::Seqz(result_register.clone(), middle_result_register.clone().unwrap()).into());
+                        self.items.push(Instruction::Sub(middle_result_register_option.clone().unwrap(), register1.clone(), register2.clone()).into());
+                        self.items.push(Instruction::Seqz(result_register.clone(), middle_result_register_option.clone().unwrap()).into());
                     }
                     ir::Op::NotEq => {
-                        self.items.push(Instruction::Sub(middle_result_register.clone().unwrap(), register1, register2).into());
-                        self.items.push(Instruction::Snez(result_register.clone(), middle_result_register.clone().unwrap()).into());
+                        self.items.push(Instruction::Sub(middle_result_register_option.clone().unwrap(), register1.clone(), register2.clone()).into());
+                        self.items.push(Instruction::Snez(result_register.clone(), middle_result_register_option.clone().unwrap()).into());
                     }
                     ir::Op::Greater => {
-                        self.items.push(Instruction::Sgt(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Sgt(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     ir::Op::GreaterEq => {
-                        self.items.push(Instruction::Slt(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Slt(result_register.clone(), register1.clone(), register2.clone()).into());
                         self.items.push(Instruction::Seqz(result_register.clone(), result_register.clone()).into());
                     }
                     ir::Op::Less => {
-                        self.items.push(Instruction::Slt(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Slt(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     ir::Op::LessEq => {
-                        self.items.push(Instruction::Sgt(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Sgt(result_register.clone(), register1.clone(), register2.clone()).into());
                         self.items.push(Instruction::Seqz(result_register.clone(), result_register.clone()).into());
                     }
                     ir::Op::Mod => {
-                        self.items.push(Instruction::Rem(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Rem(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     ir::Op::IntDiv => {
-                        self.items.push(Instruction::Div(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Div(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     ir::Op::And => {
-                        self.items.push(Instruction::And(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::And(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     ir::Op::Or => {
-                        self.items.push(Instruction::Or(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Or(result_register.clone(), register1.clone(), register2.clone()).into());
                     }
                     _ => {}
+                }
+
+                self.recycle_register(register1);
+                self.recycle_register(register2);
+
+                if let Some(middle_result_register) = middle_result_register_option {
+                    self.recycle_register(middle_result_register);
                 }
 
                 self.store_to_value_storage(storage, result_register);
@@ -967,7 +990,9 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
 
                     let register = self.load_value_storage(operand);
 
-                    self.items.push(Instruction::Sub(result_register.clone(), Register::X0, register).into());
+                    self.items.push(Instruction::Sub(result_register.clone(), Register::X0, register.clone()).into());
+
+                    self.recycle_register(register);
 
                     self.store_to_value_storage(storage, result_register);
                 }
@@ -976,7 +1001,9 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
 
                     let register = self.load_value_storage(operand);
 
-                    self.items.push(Instruction::Seqz(result_register.clone(), register).into());
+                    self.items.push(Instruction::Seqz(result_register.clone(), register.clone()).into());
+
+                    self.recycle_register(register);
 
                     self.store_to_value_storage(storage, result_register);
                 }
@@ -986,10 +1013,15 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                 let call_function = self.ir_context.function_map.get(label).unwrap();
 
                 let mut i = 0;
+
                 for (parameter, _) in &call_function.local_map {
                     self.copy_to_call_function(call_function, parameter, items.get(i).unwrap());
 
                     i += 1;
+
+                    if i == items.len() {
+                        break;
+                    }
                 }
 
                 self.items.push(Instruction::Call((*label).to_owned()).into());
