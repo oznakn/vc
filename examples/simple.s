@@ -1,27 +1,14 @@
 .global _start
-
-
-.section .rodata
-__F10:
-        .double     10.0000
-C0:
-        .string     " "
-C1:
-        .string     "\n"
-C2:
-        .word       0
-C3:
-        .word       1
-C4:
-        .double     1.2000
-C5:
-        .double     3.4000
-C6:
-        .double     1.0000
-
-
+.section rodata
+    __F10: .double 10.0000
+    C0: .string " "
+    C1: .string "\n"
+    C2: .word 0
+    C3: .word 1
+    C4: .double 1.2000
+    C5: .double 3.4000
+    C6: .double 1.0000
 .section .text
-
 
 .print_int:
         mv          t0, a0
@@ -74,8 +61,6 @@ C6:
 .print_int__4:
         addi        sp, sp, 58
         ret
-
-
 
 
 .print_real:
@@ -167,30 +152,25 @@ C6:
         addi        sp, sp, 58
         ret
 
-
 _start:
-        jal         ra, main
-        lw          a0, -4(sp)
-        addi        a7, x0, 93
-        ecall       
+    jal main
+    addi a7, x0, 93
+    ecall
 main:
-        addi        sp, sp, -28
-        sd          ra, 20(sp)
-        fld         fa1, C4, a6
-        fld         fa2, C5, a6
-        fmul.d      ft0, fa1, fa2
-        fsd         ft0, 0(sp)
-        fld         ft0, 0(sp)
-        fsd         ft0, 8(sp)
-        fld         fa0, 8(sp)
-        call        .print_real
-        addi        a0, x0, 1
-        la          a1, C1
-        addi        a2, x0, 2
-        addi        a7, x0, 64
-        ecall       
-        lw          a0, C2
-        ld          ra, 20(sp)
-        addi        sp, sp, 28
-        ret         
-
+    addi sp, sp, -28
+    sd ra, 20(sp)
+    fld ft4, C4
+    fld ft5, C5
+    fmul.d ft3, ft4, ft5
+    fsd ft3, 0(sp)
+    fld ft3, 0(sp)
+    fsd ft3, 8(sp)
+    call .print_real
+    addi a0, x0, 1
+    la a1, C1
+    addi a2, x0, 2
+    addi a7, x0, 64
+    ecall
+    ld ra, 20(sp)
+    addi sp, sp, 28
+    ret

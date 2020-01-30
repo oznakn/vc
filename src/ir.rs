@@ -46,7 +46,7 @@ impl<'input> fmt::Display for ConstValue<'input> {
 pub type Label = String;
 pub type VariablePointer = (ValueStorage, ValueStorage);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Op {
     Add,
     Sub,

@@ -1,27 +1,34 @@
-use std::cmp::max;
 use std::collections::{HashMap, VecDeque};
+use std::fmt;
 
 use crate::ast;
 use crate::ir;
-use crate::ir::ValueStorage;
 use crate::MAIN_FUNCTION;
-use test::TestType::IntegrationTest;
 
 #[derive(Clone, Debug)]
-enum DataLocation {
+pub enum DataLocation {
     Memory(i64),
     MemoryWithRegister(i64, Register),
     Program(String),
 }
 
+impl fmt::Display for DataLocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DataLocation::Memory(offset) => write!(f, "{}(sp)", offset),
+            DataLocation::MemoryWithRegister(offset, register) => write!(f, "{}({})", offset, register),
+            DataLocation::Program(s) => write!(f, "{}", s),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
-enum IntegerRegister {
+pub enum Register {
     X0,
     RA,
     SP,
-    GP,
-    TP,
-
+    // GP,
+    // TP,
     T0,
     T1,
     T2,
@@ -54,10 +61,7 @@ enum IntegerRegister {
     T4,
     T5,
     T6,
-}
 
-#[derive(Clone, Debug)]
-enum FloatRegister {
     FT0,
     FT1,
     FT2,
@@ -89,90 +93,203 @@ enum FloatRegister {
     FS10,
     FS11,
 
+    FT7,
     FT8,
     FT9,
     FT10,
     FT11,
 }
 
-#[derive(Clone, Debug)]
-enum Register {
-    IntegerRegister(IntegerRegister),
-    FloatRegister(FloatRegister),
-}
-
-impl From<IntegerRegister> for Register {
-    fn from(integer_register: IntegerRegister) -> Self {
-        Register::IntegerRegister(general_register)
-    }
-}
-
-impl From<FloatRegister> for Register {
-    fn from(float_register: FloatRegister) -> Self {
-        Register::FloatRegister(general_register)
-    }
-}
-
 impl Register {
-    fn unwrap_as_integer(&self) -> &IntegerRegister {
+    fn is_integer_register(&self) -> bool {
         match self {
-            Register::IntegerRegister(integer_register) => integer_register,
-            _ => unreachable!(),
+            Register::T0 | Register::T1 | Register::T2 | Register::T3 | Register::T4 | Register::T5 | Register::T6 => true,
+            _ => false,
         }
     }
 
-    fn unwrap_as_float(&self) -> &FloatRegister {
+    fn is_float_register(&self) -> bool {
         match self {
-            Register::FloatRegister(float_register) => float_register,
-            _ => unreachable!(),
+            Register::FT0 | Register::FT1 | Register::FT2 | Register::FT3 | Register::FT4 | Register::FT5 | Register::FT6 | Register::FT7 | Register::FT8 | Register::FT9 | Register::FT10 | Register::FT11 => true,
+            _ => false,
+        }
+    }
+
+    fn is_full_width_register(&self) -> bool {
+        match self {
+            Register::RA | Register::SP => true,
+            _ => self.is_float_register(),
+        }
+    }
+}
+
+impl fmt::Display for Register {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Register::X0 => write!(f, "x0"),
+            Register::RA => write!(f, "ra"),
+            Register::SP => write!(f, "sp"),
+
+            Register::T0 => write!(f, "t0"),
+            Register::T1 => write!(f, "t1"),
+            Register::T2 => write!(f, "t2"),
+
+            Register::S0 => write!(f, "s0"),
+            Register::S1 => write!(f, "s1"),
+
+            Register::A0 => write!(f, "a0"),
+            Register::A1 => write!(f, "a1"),
+            Register::A2 => write!(f, "a2"),
+            Register::A3 => write!(f, "a3"),
+            Register::A4 => write!(f, "a4"),
+            Register::A5 => write!(f, "a5"),
+            Register::A6 => write!(f, "a6"),
+            Register::A7 => write!(f, "a7"),
+
+            Register::S2 => write!(f, "s2"),
+            Register::S3 => write!(f, "s3"),
+            Register::S4 => write!(f, "s4"),
+            Register::S5 => write!(f, "s5"),
+            Register::S6 => write!(f, "s6"),
+            Register::S7 => write!(f, "s7"),
+            Register::S8 => write!(f, "s8"),
+            Register::S9 => write!(f, "s9"),
+
+            Register::S10 => write!(f, "s10"),
+            Register::S11 => write!(f, "s11"),
+
+            Register::T3 => write!(f, "t3"),
+            Register::T4 => write!(f, "t4"),
+            Register::T5 => write!(f, "t5"),
+            Register::T6 => write!(f, "t6"),
+
+            Register::FT0 => write!(f, "ft0"),
+            Register::FT1 => write!(f, "ft1"),
+            Register::FT2 => write!(f, "ft2"),
+            Register::FT3 => write!(f, "ft3"),
+            Register::FT4 => write!(f, "ft4"),
+            Register::FT5 => write!(f, "ft5"),
+            Register::FT6 => write!(f, "ft6"),
+
+            Register::FS0 => write!(f, "fs0"),
+            Register::FS1 => write!(f, "fs1"),
+
+            Register::FA0 => write!(f, "fa0"),
+            Register::FA1 => write!(f, "fa1"),
+            Register::FA2 => write!(f, "fa2"),
+            Register::FA3 => write!(f, "fa3"),
+            Register::FA4 => write!(f, "fa4"),
+            Register::FA5 => write!(f, "fa5"),
+            Register::FA6 => write!(f, "fa6"),
+            Register::FA7 => write!(f, "fa7"),
+
+            Register::FS2 => write!(f, "s2"),
+            Register::FS3 => write!(f, "s3"),
+            Register::FS4 => write!(f, "s4"),
+            Register::FS5 => write!(f, "s5"),
+            Register::FS6 => write!(f, "s6"),
+            Register::FS7 => write!(f, "s7"),
+            Register::FS8 => write!(f, "s8"),
+            Register::FS9 => write!(f, "s9"),
+            Register::FS10 => write!(f, "s10"),
+            Register::FS11 => write!(f, "s11"),
+
+            Register::FT7 => write!(f, "ft7"),
+            Register::FT8 => write!(f, "ft8"),
+            Register::FT9 => write!(f, "ft9"),
+            Register::FT10 => write!(f, "ft10"),
+            Register::FT11 => write!(f, "ft11"),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-enum Instruction {
+pub enum Instruction {
     Jal(String),
     Jump(String),
     Call(String),
+    Mv(Register, Register),
     ECall(),
     Ret(),
 
-    Add(IntegerRegister, IntegerRegister, IntegerRegister),
-    AddI(IntegerRegister, IntegerRegister, String),
-    And(IntegerRegister, IntegerRegister, IntegerRegister),
-    Beq(IntegerRegister, IntegerRegister, String),
-    Beqz(IntegerRegister, String),
-    Bne(IntegerRegister, IntegerRegister, String),
-    Div(IntegerRegister, IntegerRegister, IntegerRegister),
-    LoadW(IntegerRegister, DataLocation),
-    LoadD(IntegerRegister, DataLocation),
-    LoadA(IntegerRegister, DataLocation),
-    Mul(IntegerRegister, IntegerRegister, IntegerRegister),
-    Or(IntegerRegister, IntegerRegister, IntegerRegister),
-    StoreW(IntegerRegister, DataLocation),
-    StoreD(IntegerRegister, DataLocation),
-    Sub(IntegerRegister, IntegerRegister, IntegerRegister),
-    Seqz(IntegerRegister, IntegerRegister),
-    Snez(IntegerRegister, IntegerRegister),
-    Sgt(IntegerRegister, IntegerRegister, IntegerRegister),
-    Slt(IntegerRegister, IntegerRegister, IntegerRegister),
-    Rem(IntegerRegister, IntegerRegister, IntegerRegister),
+    Add(Register, Register, Register),
+    AddI(Register, Register, String),
+    And(Register, Register, Register),
+    Beqz(Register, String),
+    Div(Register, Register, Register),
+    Load(Register, DataLocation),
+    LoadD(Register, DataLocation),
+    LoadA(Register, DataLocation),
+    Mul(Register, Register, Register),
+    Or(Register, Register, Register),
+    Store(Register, DataLocation),
+    StoreD(Register, DataLocation),
+    Sub(Register, Register, Register),
+    Seqz(Register, Register),
+    Snez(Register, Register),
+    Sgt(Register, Register, Register),
+    Slt(Register, Register, Register),
+    Rem(Register, Register, Register),
 
-    FAdd(FloatRegister, FloatRegister, FloatRegister),
-    FConvertFFromI(FloatRegister, IntegerRegister), // to, from
-    FConvertIFromF(IntegerRegister, FloatRegister), // to, from
-    FDiv(FloatRegister, FloatRegister, FloatRegister),
-    FMul(FloatRegister, FloatRegister, FloatRegister),
-    FSub(FloatRegister, FloatRegister, FloatRegister),
-    FEq(IntegerRegister, FloatRegister, FloatRegister),
-    FGt(IntegerRegister, FloatRegister, FloatRegister),
-    FLt(IntegerRegister, FloatRegister, FloatRegister),
-    FLoad(FloatRegister, DataLocation),
-    FStore(FloatRegister, DataLocation),
+    ConvertFFromI(Register, Register),
+    ConvertFIromF(Register, Register),
+
+    FAdd(Register, Register, Register),
+    FDiv(Register, Register, Register),
+    FLoad(Register, DataLocation),
+    FMul(Register, Register, Register),
+    FStore(Register, DataLocation),
+    FSub(Register, Register, Register),
+    FSgt(Register, Register, Register),
+    FSlt(Register, Register, Register),
+}
+
+impl fmt::Display for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Instruction::Jal(s) => write!(f, "jal {}", s),
+            Instruction::Jump(s) => write!(f, "j {}", s),
+            Instruction::Call(s) => write!(f, "call {}", s),
+            Instruction::Mv(x, y) => write!(f, "mv {}, {}", x, y),
+            Instruction::ECall() => write!(f, "ecall"),
+            Instruction::Ret() => write!(f, "ret"),
+
+            Instruction::Add(x, y, z) => write!(f, "add {}, {}, {}", x, y, z),
+            Instruction::AddI(x, y, z) => write!(f, "addi {}, {}, {}", x, y, z),
+            Instruction::And(x, y, z) => write!(f, "and {}, {}, {}", x, y, z),
+            Instruction::Beqz(x, y) => write!(f, "beqz {}, {}", x, y),
+            Instruction::Div(x, y, z) => write!(f, "div {}, {}, {}", x, y, z),
+            Instruction::Load(x, y) => write!(f, "lw {}, {}", x, y),
+            Instruction::LoadD(x, y) => write!(f, "ld {}, {}", x, y),
+            Instruction::LoadA(x, y) => write!(f, "la {}, {}", x, y),
+            Instruction::Mul(x, y, z) => write!(f, "mul {}, {}, {}", x, y, z),
+            Instruction::Or(x, y, z) => write!(f, "or {}, {}, {}", x, y, z),
+            Instruction::Store(x, y) => write!(f, "sw {}, {}", x, y),
+            Instruction::StoreD(x, y) => write!(f, "sd {}, {}", x, y),
+            Instruction::Sub(x, y, z) => write!(f, "sub {}, {}, {}", x, y, z),
+            Instruction::Seqz(x, y) => write!(f, "seqz {}, {}", x, y),
+            Instruction::Snez(x, y) => write!(f, "snez {}, {}", x, y),
+            Instruction::Sgt(x, y, z) => write!(f, "sgt {}, {}, {}", x, y, z),
+            Instruction::Slt(x, y, z) => write!(f, "slt {}, {}, {}", x, y, z),
+            Instruction::Rem(x, y, z) => write!(f, "rem {}, {}, {}", x, y, z),
+
+            Instruction::ConvertFFromI(x, y) => write!(f, "fcvt.d.w {}, {}", x, y),
+            Instruction::ConvertFIromF(x, y) => write!(f, "fcvt.w.d {}, {}", x, y),
+
+            Instruction::FAdd(x, y, z) => write!(f, "fadd.d {}, {}, {}", x, y, z),
+            Instruction::FDiv(x, y, z) => write!(f, "fdiv.d {}, {}, {}", x, y, z),
+            Instruction::FLoad(x, y) => write!(f, "fld {}, {}", x, y),
+            Instruction::FMul(x, y, z) => write!(f, "fmul.d {}, {}, {}", x, y, z),
+            Instruction::FStore(x, y) => write!(f, "fsd {}, {}", x, y),
+            Instruction::FSub(x, y, z) => write!(f, "fsub.d {}, {}, {}", x, y, z),
+            Instruction::FSgt(x, y, z) => write!(f, "fgt.d {}, {}, {}", x, y, z),
+            Instruction::FSlt(x, y, z) => write!(f, "flt.d {}, {}, {}", x, y, z),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
-enum DataSectionItem {
+pub enum DataSectionItem {
     String(DataLocation, String),
     Word(DataLocation, String),
     Double(DataLocation, String),
@@ -180,13 +297,39 @@ enum DataSectionItem {
     Zero(DataLocation, String),
 }
 
+impl fmt::Display for DataSectionItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DataSectionItem::String(data_location, s) => write!(f, "{}: .string {}", data_location, s),
+            DataSectionItem::Word(data_location, s) => write!(f, "{}: .word {}", data_location, s),
+            DataSectionItem::Double(data_location, s) => write!(f, "{}: .double {}", data_location, s),
+            DataSectionItem::Byte(data_location, s) => write!(f, "{}: .byte {}", data_location, s),
+            DataSectionItem::Zero(data_location, s) => write!(f, "{}: .zero {}", data_location, s),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum GeneratedCodeItem {
+    Global(String),
     Section(String),
     Label(String),
     DataSectionItem(DataSectionItem),
     Instruction(Instruction),
     Raw(String),
+}
+
+impl fmt::Display for GeneratedCodeItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GeneratedCodeItem::Global(s) => write!(f, ".global {}", s),
+            GeneratedCodeItem::Section(s) => write!(f, ".section {}", s),
+            GeneratedCodeItem::Label(s) => write!(f, "{}:", s),
+            GeneratedCodeItem::DataSectionItem(i) => write!(f, "{}{}", " ".repeat(4), i),
+            GeneratedCodeItem::Instruction(i) => write!(f, "{}{}", " ".repeat(4), i),
+            GeneratedCodeItem::Raw(s) => write!(f, "{}", s),
+        }
+    }
 }
 
 impl From<Instruction> for GeneratedCodeItem {
@@ -358,14 +501,19 @@ pub struct CodeGenerator<'input, 'ir> {
     is_ro_data_section_started: bool,
     is_data_section_started: bool,
     is_text_section_started: bool,
+
     current_function: Option<&'ir ir::Function<'input>>,
     function_stack_offset_map: HashMap<String, (u64, HashMap<ir::ValueStorage, u64>)>,
+
+    available_temporary_integer_registers: VecDeque<Register>,
+    available_temporary_float_registers: VecDeque<Register>,
+
     items: Vec<GeneratedCodeItem>,
 }
 
 impl<'input, 'ir> CodeGenerator<'input, 'ir> {
     fn new(ir_context: &'ir ir::IRContext<'input>) -> Self {
-        return CodeGenerator {
+        let mut generator = CodeGenerator {
             ir_context,
 
             is_ro_data_section_started: false,
@@ -374,8 +522,42 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
 
             current_function: None,
             function_stack_offset_map: HashMap::new(),
+
+            available_temporary_integer_registers: VecDeque::new(),
+            available_temporary_float_registers: VecDeque::new(),
+
             items: Vec::new(),
         };
+
+        // T0, T1 and FT0, FT1 reserved for i to f and f to i convert operations
+
+        generator.available_temporary_integer_registers.push_front(Register::T2);
+        generator.available_temporary_integer_registers.push_front(Register::T3);
+        generator.available_temporary_integer_registers.push_front(Register::T4);
+        generator.available_temporary_integer_registers.push_front(Register::T5);
+        generator.available_temporary_integer_registers.push_front(Register::T6);
+
+        generator.available_temporary_float_registers.push_front(Register::FT2);
+        generator.available_temporary_float_registers.push_front(Register::FT3);
+        generator.available_temporary_float_registers.push_front(Register::FT4);
+        generator.available_temporary_float_registers.push_front(Register::FT5);
+        generator.available_temporary_float_registers.push_front(Register::FT6);
+        generator.available_temporary_float_registers.push_front(Register::FT7);
+        generator.available_temporary_float_registers.push_front(Register::FT8);
+        generator.available_temporary_float_registers.push_front(Register::FT9);
+        generator.available_temporary_float_registers.push_front(Register::FT10);
+        generator.available_temporary_float_registers.push_front(Register::FT11);
+
+        generator
+    }
+
+    fn recycle_register(&mut self, register: Register) {
+        match register {
+            Register::T0 | Register::T1 | Register::T2 | Register::T3 | Register::T4 | Register::T5 | Register::T6 => self.available_temporary_integer_registers.push_back(register),
+
+            Register::FT0 | Register::FT1 | Register::FT2 | Register::FT3 | Register::FT4 | Register::FT5 | Register::FT6 | Register::FT7 | Register::FT8 | Register::FT9 | Register::FT10 | Register::FT11 => self.available_temporary_float_registers.push_back(register),
+            _ => unreachable!(),
+        }
     }
 
     fn fetch_value_type(&self, value_storage: &ir::ValueStorage) -> ast::ValueType {
@@ -401,7 +583,7 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
 
     fn initialize_stack(&mut self) {
         let mut current_function = None;
-        let mut local_queue = VecDeque::new();
+        let mut local_stack = VecDeque::new();
 
         let mut function_map = HashMap::new();
         let mut stack_offset_map = HashMap::new();
@@ -414,16 +596,16 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                     current_function = Some(f);
                 }
                 ir::IRItem::Local(value_storage) => {
-                    local_queue.push_back(value_storage);
+                    local_stack.push_back(value_storage);
                 }
                 ir::IRItem::Param(value_storage) => {
-                    local_queue.push_back(value_storage);
+                    local_stack.push_back(value_storage);
                 }
                 ir::IRItem::EndFunction() => {
                     let f = current_function.unwrap();
                     let mut offset: u64 = 0;
 
-                    while let Some(value_storage) = local_queue.pop_back() {
+                    while let Some(value_storage) = local_stack.pop_back() {
                         stack_offset_map.insert(value_storage.to_owned(), offset);
 
                         let size = self.value_type_to_size(f.local_map.get(value_storage).unwrap());
@@ -448,8 +630,7 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
         if !self.is_ro_data_section_started {
             self.items.push(GeneratedCodeItem::Section("rodata".to_string()));
 
-            self.items.push(GeneratedCodeItem::Label(FLOAT_10_LABEL.to_owned()));
-            self.items.push(GeneratedCodeItem::DataItem(DataItem::Double("10.0000".to_owned())));
+            self.items.push(GeneratedCodeItem::DataSectionItem(DataSectionItem::Double(DataLocation::Program(FLOAT_10_LABEL.to_owned()), "10.0000".to_owned())));
 
             self.is_ro_data_section_started = true;
         }
@@ -483,21 +664,11 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
         DataLocation::Memory(*offset as i64 - FULL_WIDTH_SIZE as i64)
     }
 
-    /* fn value_storage_to_string_for_label(&self, s: &'ir ir::ValueStorage) -> String {
-        return match s {
-            ir::ValueStorage::Const(i) => format!("C{}", i),
-            ir::ValueStorage::Var(i) => format!("V{}", i),
-            _ => format!(""),
-        };
-    } */
-
     fn value_storage_to_location(&self, s: &'ir ir::ValueStorage) -> DataLocation {
-        let value_type = self.fetch_value_type(s);
-
         match s {
             ir::ValueStorage::Const(i) => DataLocation::Program(format!("C{}", i)),
             ir::ValueStorage::Var(i) => DataLocation::Program(format!("V{}", i)),
-            ir::ValueStorage::Local(i) => {
+            ir::ValueStorage::Local(_) => {
                 let stack_offset_map = self.get_stack_offset_map();
 
                 DataLocation::Memory(stack_offset_map.get(s).unwrap().to_owned() as i64)
@@ -505,63 +676,73 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
         }
     }
 
+    #[inline]
     fn load_value_storage_address_to_register(&mut self, storage: &'ir ir::ValueStorage, register: Register) {
-        self.items.push(Instruction::LoadA(register.unwrap_as_integer().to_owned(), self.value_storage_to_location(storage)).into());
+        self.items.push(Instruction::LoadA(register, self.value_storage_to_location(storage)).into());
     }
 
+    #[allow(dead_code)]
+    #[inline]
+    fn load_value_storage_address(&mut self, storage: &'ir ir::ValueStorage) -> Register {
+        let register = self.available_temporary_integer_registers.pop_back().unwrap();
+
+        self.load_value_storage_address_to_register(storage, register.clone());
+
+        register
+    }
+
+    #[inline]
+    fn load_data_location_to_register(&mut self, data_location: DataLocation, register: Register) {
+        self.items.push(Instruction::Load(register, data_location).into());
+    }
+
+    #[inline]
     fn load_value_storage_to_register(&mut self, storage: &'ir ir::ValueStorage, register: Register) {
+        self.load_data_location_to_register(self.value_storage_to_location(storage), register);
+    }
+
+    #[inline]
+    fn load_value_storage(&mut self, storage: &'ir ir::ValueStorage) -> Register {
         let value_type = self.fetch_value_type(storage);
 
         match value_type {
             ast::ValueType::Int => {
-                self.items.push(Instruction::LoadW(register.unwrap_as_integer().to_owned(), self.value_storage_to_location(storage)).into());
+                let register = self.available_temporary_integer_registers.pop_back().unwrap();
+
+                self.load_value_storage_to_register(storage, register.clone());
+
+                register
             }
             ast::ValueType::Real => {
-                self.items.push(Instruction::FLoad(register.unwrap_as_float().to_owned(), self.value_storage_to_location(storage)).into());
+                let register = self.available_temporary_float_registers.pop_back().unwrap();
+
+                self.load_value_storage_to_register(storage, register.clone());
+
+                register
             }
-            _ => {}
+            _ => unreachable!(),
         }
     }
 
-    fn store_register_to_value_storage(&mut self, storage: &'ir ir::ValueStorage, register: Register) {
-        let value_type = self.fetch_value_type(storage);
+    #[inline]
+    fn store_to_data_location(&mut self, data_location: DataLocation, register: Register) {
+        self.items.push(Instruction::Store(register.clone(), data_location).into());
 
-        match value_type {
-            ast::ValueType::Int => {
-                self.items.push(Instruction::StoreW(register.unwrap_as_integer().to_owned(), self.value_storage_to_location(storage)).into());
-            }
-            ast::ValueType::Real => {
-                self.items.push(Instruction::FStore(register.unwrap_as_float().to_owned(), self.value_storage_to_location(storage)).into());
-            }
-            _ => {}
-        }
+        self.recycle_register(register);
+    }
+
+    #[inline]
+    fn store_to_value_storage(&mut self, storage: &'ir ir::ValueStorage, register: Register) {
+        self.store_to_data_location(self.value_storage_to_location(storage), register);
     }
 
     fn copy_to_call_function(&mut self, call_function: &'ir ir::Function, to: &'ir ir::ValueStorage, from: &'ir ir::ValueStorage) {
-        let from_value_type = self.fetch_value_type(from);
-
-        match from_value_type {
-            ast::ValueType::Int => {
-                self.items.push(Instruction::LoadW(IntegerRegister::A0, self.value_storage_to_location(storage)).into());
-            }
-            ast::ValueType::Real => {
-                self.items.push(Instruction::FLoad(FloatRegister::FA0, self.value_storage_to_location(storage)).into());
-            }
-            _ => {}
-        }
+        let register = self.load_value_storage(from);
 
         let (offset, stack_offset_map) = self.function_stack_offset_map.get(call_function.name).unwrap();
         let variable_offset = -(*offset as i64) + (*stack_offset_map.get(to).unwrap() as i64);
 
-        match from_value_type {
-            ast::ValueType::Int => {
-                self.items.push(Instruction::StoreW(IntegerRegister::A0, DataLocation::Memory(variable_offset)).into());
-            }
-            ast::ValueType::Real => {
-                self.items.push(Instruction::FStore(FloatRegister::FA0, DataLocation::Memory(variable_offset)).into());
-            }
-            _ => {}
-        }
+        self.store_to_data_location(DataLocation::Memory(variable_offset), register);
     }
 
     fn visit(&mut self, ir_item: &'ir ir::IRItem<'input>) {
@@ -580,7 +761,7 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                         }
                     }
                     ir::ConstValue::String(s) => {
-                        self.items.push(DataSectionItem::String(data_location, format!("\"{}\", s")).into());
+                        self.items.push(DataSectionItem::String(data_location, format!("\"{}\"", s)).into());
                     }
                     ir::ConstValue::Int(v) => {
                         self.items.push(DataSectionItem::Word(data_location, format!("{}", v)).into());
@@ -601,8 +782,8 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                 self.items.push(GeneratedCodeItem::Label(START_LABEL.to_owned()));
 
                 self.items.push(Instruction::Jal(MAIN_FUNCTION.to_owned()).into());
-                self.items.push(Instruction::LoadW(IntegerRegister::A0, DataLocation::Memory(-4)).into());
-                self.items.push(Instruction::AddI(IntegerRegister::A7, IntegerRegister::X0, "93".to_owned()).into());
+                self.items.push(Instruction::Load(Register::A0, DataLocation::Memory(-4)).into());
+                self.items.push(Instruction::AddI(Register::A7, Register::X0, "93".to_owned()).into());
                 self.items.push(Instruction::ECall().into());
             }
             ir::IRItem::Label(label) => {
@@ -621,8 +802,8 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
 
                 self.items.push(GeneratedCodeItem::Label(label.to_string()));
 
-                self.items.push(Instruction::AddI(IntegerRegister::SP, IntegerRegister::SP, format!("-{}", offset)).into());
-                self.items.push(Instruction::StoreD(IntegerRegister::RA, self.get_jump_address()).into());
+                self.items.push(Instruction::AddI(Register::SP, Register::SP, format!("-{}", offset)).into());
+                self.items.push(Instruction::Store(Register::RA, self.get_jump_address()).into());
             }
             ir::IRItem::Return(s) => {
                 let f = self.current_function.unwrap();
@@ -633,53 +814,42 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
 
                 match value_type {
                     ast::ValueType::Int => {
-                        self.load_value_storage_to_register(s, IntegerRegister::A0.into());
+                        self.load_value_storage_to_register(s, Register::A0.into());
                     }
                     ast::ValueType::Real => {
-                        self.load_value_storage_to_register(s, FloatRegister::FA0.into());
+                        self.load_value_storage_to_register(s, Register::FA0.into());
                     }
                     _ => unreachable!(),
                 }
 
-                self.items.push(Instruction::LoadD(IntegerRegister::RA, self.get_jump_address()).into());
-                self.items.push(Instruction::AddI(IntegerRegister::SP, IntegerRegister::SP, format!("{}", offset)).into());
+                self.items.push(Instruction::Load(Register::RA, self.get_jump_address()).into());
+                self.items.push(Instruction::AddI(Register::SP, Register::SP, format!("{}", offset)).into());
                 self.items.push(Instruction::Ret().into());
             }
             ir::IRItem::Copy(s1, s2) => {
-                let value_type = self.fetch_value_type(s2);
-
-                match value_type {
-                    ast::ValueType::Int => {
-                        self.load_value_storage_to_register(s2, IntegerRegister::T0.into());
-                        self.store_register_to_value_storage(s1, IntegerRegister::T0.into());
-                    }
-                    ast::ValueType::Real => {
-                        self.load_value_storage_to_register(s2, FloatRegister::FT0.into());
-                        self.store_register_to_value_storage(s1, FloatRegister::FT0.into());
-                    }
-                    _ => {}
-                }
+                let register = self.load_value_storage(s2);
+                self.store_to_value_storage(s1, register);
             }
             ir::IRItem::Print(s) => {
                 let value_type = self.fetch_value_type(s);
 
                 match value_type {
                     ast::ValueType::String(_) => {
-                        self.items.push(Instruction::AddI(IntegerRegister::A0, IntegerRegister::X0, "1".to_owned()).into());
+                        self.items.push(Instruction::AddI(Register::A0, Register::X0, "1".to_owned()).into());
 
-                        self.load_value_storage_address_to_register(s, IntegerRegister::A1.into());
+                        self.load_value_storage_address_to_register(s, Register::A1.into());
 
-                        self.items.push(Instruction::AddI(IntegerRegister::A2, IntegerRegister::X0, format!("{}", self.value_type_to_size(&value_type))).into());
-                        self.items.push(Instruction::AddI(IntegerRegister::A7, IntegerRegister::X0, "64".to_owned()).into());
+                        self.items.push(Instruction::AddI(Register::A2, Register::X0, format!("{}", self.value_type_to_size(&value_type))).into());
+                        self.items.push(Instruction::AddI(Register::A7, Register::X0, "64".to_owned()).into());
                         self.items.push(Instruction::ECall().into());
                     }
                     ast::ValueType::Int => {
-                        self.load_value_storage_to_register(s, IntegerRegister::A0.into());
+                        self.load_value_storage_to_register(s, Register::A0.into());
 
                         self.items.push(Instruction::Call(".print_int".to_owned()).into());
                     }
                     ast::ValueType::Real => {
-                        self.load_value_storage_to_register(s, FloatRegister::FA0.into());
+                        self.load_value_storage_to_register(s, Register::FA0.into());
 
                         self.items.push(Instruction::Call(".print_real".to_owned()).into());
                     }
@@ -690,168 +860,115 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                 self.items.push(Instruction::Jump(label.to_owned()).into());
             }
             ir::IRItem::Bz(label, s) => {
-                let value_type = self.fetch_value_type(s);
-
-                match value_type {
-                    ast::ValueType::Int => {
-                        self.load_value_storage_to_register(s, IntegerRegister::T0.into());
-                        self.items.push(Instruction::Beqz(IntegerRegister::T0, label.to_owned()).into());
-                    }
-                    ast::ValueType::Real => {
-                        self.load_value_storage_to_register(s, FloatRegister::FT0.into());
-                        self.items.push(Instruction::FConvertIFromF(IntegerRegister::T0, FloatRegister::FT0).into());
-                        self.items.push(Instruction::Beqz(IntegerRegister::T0, label.to_owned()).into());
-                    }
-                    _ => {}
-                }
+                let register = self.load_value_storage(s);
+                self.items.push(Instruction::Beqz(register, label.to_owned()).into());
             }
             ir::IRItem::Cast(to, from) => {
-                /* self.load_value_storage_to_register(from, "t0");
+                let register = self.load_value_storage(from);
+                let result_register = self.available_temporary_float_registers.pop_back().unwrap();
 
-                self.items.push(GeneratedCodeItem::Instruction("fcvt.d.w".to_string(), vec!["ft0".to_owned(), "t0".to_owned()]));
+                self.items.push(Instruction::ConvertFFromI(result_register.clone(), register).into());
 
-                self.store_register_to_value_storage(to, "ft0"); */
+                self.store_to_value_storage(to, result_register);
             }
             ir::IRItem::BinaryOp(storage, op, operand1, operand2) => {
                 let value_type1 = self.fetch_value_type(operand1);
                 let value_type2 = self.fetch_value_type(operand2);
 
-                if value_type1 == ast::ValueType::Int && value_type2 == ast::ValueType::Int {
-                    self.load_value_storage_to_register(operand1, IntegerRegister::T1.into());
-                    self.load_value_storage_to_register(operand2, IntegerRegister::T2.into());
+                let result_register;
+                let mut middle_result_register: Option<Register> = None;
 
-                    match op {
-                        ir::Op::Add => {
-                            self.items.push(Instruction::Add(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                        }
-                        ir::Op::Sub => {
-                            self.items.push(Instruction::Sub(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                        }
-                        ir::Op::Mul => {
-                            self.items.push(Instruction::Mul(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                        }
-                        ir::Op::Eq => {
-                            self.items.push(Instruction::Sub(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                            self.items.push(Instruction::Seqz(IntegerRegister::T0, IntegerRegister::T0).into());
-                        }
-                        ir::Op::NotEq => {
-                            self.items.push(Instruction::Sub(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                            self.items.push(Instruction::Snez(IntegerRegister::T0, IntegerRegister::T0).into());
-                        }
-                        ir::Op::Greater => {
-                            self.items.push(Instruction::Sgt(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                        }
-                        ir::Op::GreaterEq => {
-                            self.items.push(Instruction::Slt(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                            self.items.push(Instruction::Seqz(IntegerRegister::T0, IntegerRegister::T0).into());
-                        }
-                        ir::Op::Less => {
-                            self.items.push(Instruction::Slt(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                        }
-                        ir::Op::LessEq => {
-                            self.items.push(Instruction::Sgt(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                            self.items.push(Instruction::Seqz(IntegerRegister::T0, IntegerRegister::T0).into());
-                        }
-                        ir::Op::Mod => {
-                            self.items.push(Instruction::Rem(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                        }
-                        ir::Op::IntDiv => {
-                            self.items.push(Instruction::Div(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                        }
-                        ir::Op::And => {
-                            self.items.push(Instruction::And(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                        }
-                        ir::Op::Or => {
-                            self.items.push(Instruction::Or(IntegerRegister::T0, IntegerRegister::T1, IntegerRegister::T2).into());
-                        }
-                        _ => {}
-                    }
-
-                    self.store_register_to_value_storage(storage, IntegerRegister::T0.into());
-                } else {
-                    self.load_value_storage_to_register(operand1, FloatRegister::FT1.into());
-                    self.load_value_storage_to_register(operand2, FloatRegister::FT2.into());
-
-                    let mut is_result_integer = true;
-
-                    match op {
-                        ir::Op::Add => {
-                            self.items.push(Instruction::FAdd(FloatRegister::FT0, FloatRegister::FT1, FloatRegister::FT2).into());
-                            is_result_integer = false;
-                        }
-                        ir::Op::Sub => {
-                            self.items.push(Instruction::FSub(FloatRegister::FT0, FloatRegister::FT1, FloatRegister::FT2).into());
-                            is_result_integer = false;
-                        }
-                        ir::Op::Mul => {
-                            self.items.push(Instruction::FMul(FloatRegister::FT0, FloatRegister::FT1, FloatRegister::FT2).into());
-                            is_result_integer = false;
-                        }
-                        ir::Op::Div => {
-                            self.items.push(Instruction::FDiv(FloatRegister::FT0, FloatRegister::FT1, FloatRegister::FT2).into());
-                            is_result_integer = false;
-                        }
-                        ir::Op::Eq => {
-                            self.items.push(Instruction::FSub(FloatRegister::FT0, FloatRegister::FT1, FloatRegister::FT2).into());
-                            self.items.push(Instruction::Seqz(IntegerRegister::T0, IntegerRegister::T0).into());
-                        }
-                        ir::Op::NotEq => {
-                            self.items.push(Instruction::FSub(FloatRegister::FT0, FloatRegister::FT1, FloatRegister::FT2).into());
-                            self.items.push(Instruction::FConvertIFromF(IntegerRegister::T0, FloatRegister::FT0).into());
-                            self.items.push(Instruction::Snez(IntegerRegister::T0, IntegerRegister::T0).into());
-                        }
-                        ir::Op::Greater => {
-                            self.items.push(Instruction::FGt(IntegerRegister::T0, FloatRegister::FT1, FloatRegister::FT2).into());
-                        }
-                        ir::Op::GreaterEq => {
-                            self.items.push(Instruction::FLt(IntegerRegister::T0, FloatRegister::FT1, FloatRegister::FT2).into());
-                            self.items.push(Instruction::Seqz(IntegerRegister::T0, IntegerRegister::T0).into());
-                        }
-                        ir::Op::Less => {
-                            self.items.push(Instruction::FLt(IntegerRegister::T0, FloatRegister::FT1, FloatRegister::FT2).into());
-                        }
-                        ir::Op::LessEq => {
-                            self.items.push(Instruction::FGt(IntegerRegister::T0, FloatRegister::FT1, FloatRegister::FT2).into());
-                            self.items.push(Instruction::Seqz(IntegerRegister::T0, IntegerRegister::T0).into());
-                        }
-                        _ => {}
-                    }
-
-                    if is_result_integer {
-                        self.store_register_to_value_storage(storage, IntegerRegister::T0.into());
-                    } else {
-                        self.store_register_to_value_storage(storage, FloatRegister::FT0.into());
-                    }
+                if value_type1 == ast::ValueType::Real || value_type2 == ast::ValueType::Real {
+                    middle_result_register = Some(self.available_temporary_float_registers.pop_back().unwrap());
                 }
+
+                if ((value_type1 == ast::ValueType::Real || value_type2 == ast::ValueType::Real) && (*op == ir::Op::Add || *op == ir::Op::Sub || *op == ir::Op::Mul)) || *op == ir::Op::Div {
+                    result_register = self.available_temporary_float_registers.pop_back().unwrap();
+                } else {
+                    result_register = self.available_temporary_integer_registers.pop_back().unwrap();
+                }
+
+                let register1 = self.load_value_storage(operand1);
+                let register2 = self.load_value_storage(operand2);
+
+                match op {
+                    ir::Op::Add => {
+                        self.items.push(Instruction::Add(result_register.clone(), register1, register2).into());
+                    }
+                    ir::Op::Sub => {
+                        self.items.push(Instruction::Sub(result_register.clone(), register1, register2).into());
+                    }
+                    ir::Op::Mul => {
+                        self.items.push(Instruction::Mul(result_register.clone(), register1, register2).into());
+                    }
+                    ir::Op::Div => {
+                        self.items.push(Instruction::Div(result_register.clone(), register1, register2).into());
+                    }
+                    ir::Op::Eq => {
+                        self.items.push(Instruction::Sub(middle_result_register.clone().unwrap(), register1, register2).into());
+                        self.items.push(Instruction::Seqz(result_register.clone(), middle_result_register.clone().unwrap()).into());
+                    }
+                    ir::Op::NotEq => {
+                        self.items.push(Instruction::Sub(middle_result_register.clone().unwrap(), register1, register2).into());
+                        self.items.push(Instruction::Snez(result_register.clone(), middle_result_register.clone().unwrap()).into());
+                    }
+                    ir::Op::Greater => {
+                        self.items.push(Instruction::Sgt(result_register.clone(), register1, register2).into());
+                    }
+                    ir::Op::GreaterEq => {
+                        self.items.push(Instruction::Slt(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Seqz(result_register.clone(), result_register.clone()).into());
+                    }
+                    ir::Op::Less => {
+                        self.items.push(Instruction::Slt(result_register.clone(), register1, register2).into());
+                    }
+                    ir::Op::LessEq => {
+                        self.items.push(Instruction::Sgt(result_register.clone(), register1, register2).into());
+                        self.items.push(Instruction::Seqz(result_register.clone(), result_register.clone()).into());
+                    }
+                    ir::Op::Mod => {
+                        self.items.push(Instruction::Rem(result_register.clone(), register1, register2).into());
+                    }
+                    ir::Op::IntDiv => {
+                        self.items.push(Instruction::Div(result_register.clone(), register1, register2).into());
+                    }
+                    ir::Op::And => {
+                        self.items.push(Instruction::And(result_register.clone(), register1, register2).into());
+                    }
+                    ir::Op::Or => {
+                        self.items.push(Instruction::Or(result_register.clone(), register1, register2).into());
+                    }
+                    _ => {}
+                }
+
+                self.store_to_value_storage(storage, result_register);
             }
             ir::IRItem::UnaryOp(storage, op, operand) => match op {
                 ir::Op::Negative => {
                     let value_type = self.fetch_value_type(operand);
 
-                    match value_type {
-                        ast::ValueType::Int => {
-                            self.load_value_storage_to_register(operand, "t1");
+                    let result_register;
 
-                            self.items.push(GeneratedCodeItem::Instruction("sub".to_string(), vec!["t1".to_owned(), "x0".to_owned(), "t1".to_owned()]));
-
-                            self.store_register_to_value_storage(storage, "t0");
-                        }
-                        ast::ValueType::Real => {
-                            self.items.push(GeneratedCodeItem::Instruction("fcvt.d.w".to_string(), vec!["t1".to_owned(), "ft0".to_owned(), "x0".to_owned()]));
-
-                            self.items.push(GeneratedCodeItem::Instruction("fsub.d".to_string(), vec!["tf0".to_owned(), "ft1".to_owned()]));
-
-                            self.store_register_to_value_storage(storage, "ft0");
-                        }
-                        _ => {}
+                    if value_type == ast::ValueType::Real {
+                        result_register = self.available_temporary_float_registers.pop_back().unwrap();
+                    } else {
+                        result_register = self.available_temporary_integer_registers.pop_back().unwrap();
                     }
+
+                    let register = self.load_value_storage(operand);
+
+                    self.items.push(Instruction::Sub(result_register.clone(), Register::X0, register).into());
+
+                    self.store_to_value_storage(storage, result_register);
                 }
                 ir::Op::Not => {
-                    self.load_value_storage_to_register(operand, "t1");
+                    let result_register = self.available_temporary_integer_registers.pop_back().unwrap();
 
-                    self.items.push(GeneratedCodeItem::Instruction("seqz".to_string(), vec!["t0".to_owned(), "t1".to_owned()]));
+                    let register = self.load_value_storage(operand);
 
-                    self.store_register_to_value_storage(storage, "t0");
+                    self.items.push(Instruction::Seqz(result_register.clone(), register).into());
+
+                    self.store_to_value_storage(storage, result_register);
                 }
                 _ => {}
             },
@@ -865,74 +982,207 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
                     i += 1;
                 }
 
-                self.items.push(GeneratedCodeItem::Instruction("call".to_string(), vec![label.to_string()]));
+                self.items.push(Instruction::Call((*label).to_owned()).into());
 
                 match call_function.return_type {
                     ast::ValueType::Int => {
-                        self.store_register_to_value_storage(s, "a0");
+                        self.store_to_value_storage(s, Register::A0);
                     }
                     ast::ValueType::Real => {
-                        self.store_register_to_value_storage(s, "fa0");
+                        self.store_to_value_storage(s, Register::FA0);
                     }
                     _ => {}
                 }
             }
             ir::IRItem::CopyToPointer(pointer, storage) => {
-                let value_type = self.fetch_value_type(&pointer.0);
+                let value_type = self.fetch_value_type(storage);
 
                 let stack_offset_map = self.get_stack_offset_map();
-
                 let offset = stack_offset_map.get(&pointer.0).unwrap().clone();
 
-                self.load_value_storage_to_register(storage, "t3");
+                let right_register = self.load_value_storage(storage);
+                let left_register = self.load_value_storage(&pointer.1);
 
-                self.load_value_storage_to_register(&pointer.1, "t1");
-                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t2".to_owned(), "x0".to_owned(), "1".to_owned()]));
-                self.items.push(GeneratedCodeItem::Instruction("subw".to_string(), vec!["t1".to_owned(), "t1".to_owned(), "t2".to_owned()]));
-                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t0".to_owned(), "sp".to_owned(), format!("{}", offset)]));
-                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t2".to_owned(), "x0".to_owned(), format!("{}", self.value_type_to_size(&value_type.plain()))]));
-                self.items.push(GeneratedCodeItem::Instruction("mulw".to_string(), vec!["t1".to_owned(), "t1".to_owned(), "t2".to_owned()]));
-                self.items.push(GeneratedCodeItem::Instruction("addw".to_string(), vec!["t0".to_owned(), "t0".to_owned(), "t1".to_owned()]));
+                let temp_sp_register = self.available_temporary_integer_registers.pop_back().unwrap();
+                let left_coefficient_register = self.available_temporary_integer_registers.pop_back().unwrap();
 
-                match value_type.plain() {
-                    ast::ValueType::Int => {
-                        self.items.push(GeneratedCodeItem::Instruction("sw".to_string(), vec!["t3".to_owned(), "0(t0)".to_owned()]));
-                    }
-                    ast::ValueType::Real => {
-                        self.items.push(GeneratedCodeItem::Instruction("fsd".to_string(), vec!["t3".to_owned(), "0(t0)".to_owned()]));
-                    }
-                    _ => {}
-                }
+                self.items.push(Instruction::Mv(temp_sp_register.clone(), Register::SP).into());
+                self.items.push(Instruction::AddI(temp_sp_register.clone(), temp_sp_register.clone(), format!("{}", offset)).into());
+                self.items.push(Instruction::AddI(left_coefficient_register.clone(), Register::X0, format!("{}", self.value_type_to_size(&value_type.plain()))).into()); // t2
+                self.items.push(Instruction::Mul(left_register.clone(), left_register.clone(), left_coefficient_register.clone()).into());
+                self.items.push(Instruction::Add(temp_sp_register.clone(), temp_sp_register.clone(), left_register).into());
+
+                self.store_to_data_location(DataLocation::MemoryWithRegister(0, temp_sp_register), right_register);
             }
             ir::IRItem::CopyFromPointer(storage, pointer) => {
-                let value_type = self.fetch_value_type(&pointer.0);
+                let value_type = self.fetch_value_type(&pointer.0).plain();
 
                 let stack_offset_map = self.get_stack_offset_map();
-
                 let offset = stack_offset_map.get(&pointer.0).unwrap().clone();
 
-                self.load_value_storage_to_register(&pointer.1, "t1");
-                self.items.push(Instruction("addi".to_string(), vec!["t2".to_owned(), "x0".to_owned(), "1".to_owned()]));
-                self.items.push(GeneratedCodeItem::Instruction("subw".to_string(), vec!["t1".to_owned(), "t1".to_owned(), "t2".to_owned()]));
-                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t0".to_owned(), "sp".to_owned(), format!("{}", offset)]));
-                self.items.push(GeneratedCodeItem::Instruction("addi".to_string(), vec!["t2".to_owned(), "x0".to_owned(), format!("{}", self.value_type_to_size(&value_type.plain()))]));
-                self.items.push(GeneratedCodeItem::Instruction("mulw".to_string(), vec!["t1".to_owned(), "t1".to_owned(), "t2".to_owned()]));
-                self.items.push(GeneratedCodeItem::Instruction("addw".to_string(), vec!["t0".to_owned(), "t0".to_owned(), "t1".to_owned()]));
+                let left_register = self.load_value_storage(storage);
+                let right_register = self.load_value_storage(&pointer.1);
 
-                match value_type.plain() {
-                    ast::ValueType::Int => {
-                        self.items.push(GeneratedCodeItem::Instruction("lw".to_string(), vec!["t3".to_owned(), "0(t0)".to_owned()]));
-                        self.store_register_to_value_storage(storage, "t3");
-                    }
-                    ast::ValueType::Real => {
-                        self.items.push(GeneratedCodeItem::Instruction("fld".to_string(), vec!["ft3".to_owned(), "0(t0)".to_owned()]));
-                        self.store_register_to_value_storage(storage, "ft3");
-                    }
-                    _ => {}
-                }
+                let temp_sp_register = self.available_temporary_integer_registers.pop_back().unwrap();
+                let right_coefficient_register = self.available_temporary_integer_registers.pop_back().unwrap();
+
+                self.items.push(Instruction::Mv(temp_sp_register.clone(), Register::SP).into());
+                self.items.push(Instruction::AddI(temp_sp_register.clone(), temp_sp_register.clone(), format!("{}", offset)).into());
+                self.items.push(Instruction::AddI(right_coefficient_register.clone(), Register::X0, format!("{}", self.value_type_to_size(&value_type))).into()); // t2
+                self.items.push(Instruction::Mul(right_register.clone(), right_register.clone(), right_coefficient_register).into());
+                self.items.push(Instruction::Add(temp_sp_register.clone(), temp_sp_register.clone(), right_register).into());
+
+                self.store_to_data_location(DataLocation::MemoryWithRegister(0, temp_sp_register), left_register);
             }
             _ => {}
         }
+    }
+
+    fn generate_fixed_generated_items(&mut self) -> Vec<GeneratedCodeItem> {
+        let mut new_items: Vec<GeneratedCodeItem> = Vec::new();
+
+        for item in &self.items {
+            match item {
+                GeneratedCodeItem::Instruction(instruction) => match instruction {
+                    Instruction::Add(x, y, z) => {
+                        if x.is_float_register() {
+                            let mut operand1 = y.clone();
+                            let mut operand2 = z.clone();
+
+                            if !operand1.is_float_register() {
+                                new_items.push(Instruction::ConvertFFromI(Register::FT0, operand1).into());
+                                operand1 = Register::FT0;
+                            }
+
+                            if !operand2.is_float_register() {
+                                new_items.push(Instruction::ConvertFFromI(Register::FT1, operand2).into());
+                                operand2 = Register::FT1;
+                            }
+
+                            new_items.push(Instruction::FAdd(x.clone(), operand1, operand2).into());
+                        } else {
+                            new_items.push(instruction.clone().into());
+                        }
+                    }
+                    Instruction::Beqz(x, y) => {
+                        if x.is_float_register() {
+                            new_items.push(Instruction::ConvertFIromF(Register::T0, x.clone()).into());
+                            new_items.push(Instruction::Beqz(Register::T0, y.clone()).into());
+                        } else {
+                            new_items.push(instruction.clone().into());
+                        }
+                    }
+                    Instruction::Div(x, y, z) => {
+                        let mut operand1 = y.clone();
+                        let mut operand2 = z.clone();
+
+                        if x.is_float_register() {
+                            if !operand1.is_float_register() {
+                                new_items.push(Instruction::ConvertFFromI(Register::FT0, operand1).into());
+                                operand1 = Register::FT0;
+                            }
+
+                            if !operand2.is_float_register() {
+                                new_items.push(Instruction::ConvertFFromI(Register::FT1, operand2).into());
+                                operand2 = Register::FT1;
+                            }
+
+                            new_items.push(Instruction::FDiv(x.clone(), operand1, operand2).into());
+                        } else {
+                            if operand1.is_float_register() {
+                                new_items.push(Instruction::ConvertFIromF(Register::T0, operand1).into());
+                                operand1 = Register::T0;
+                            }
+
+                            if operand2.is_float_register() {
+                                new_items.push(Instruction::ConvertFIromF(Register::T1, operand2).into());
+                                operand2 = Register::T1;
+                            }
+
+                            new_items.push(Instruction::Div(x.clone(), operand1, operand2).into());
+                        }
+                    }
+                    Instruction::Load(register, data_location) => {
+                        if register.is_integer_register() {
+                            new_items.push(Instruction::Load(register.clone(), data_location.clone()).into());
+                        } else if register.is_float_register() {
+                            new_items.push(Instruction::FLoad(register.clone(), data_location.clone()).into());
+                        } else if register.is_full_width_register() {
+                            new_items.push(Instruction::LoadD(register.clone(), data_location.clone()).into());
+                        }
+                    }
+                    Instruction::Mul(x, y, z) => {
+                        if x.is_float_register() {
+                            let mut operand1 = y.clone();
+                            let mut operand2 = z.clone();
+
+                            if !operand1.is_float_register() {
+                                new_items.push(Instruction::ConvertFFromI(Register::FT0, operand1).into());
+                                operand1 = Register::FT0;
+                            }
+
+                            if !operand2.is_float_register() {
+                                new_items.push(Instruction::ConvertFFromI(Register::FT1, operand2).into());
+                                operand2 = Register::FT1;
+                            }
+
+                            new_items.push(Instruction::FMul(x.clone(), operand1, operand2).into());
+                        } else {
+                            new_items.push(instruction.clone().into());
+                        }
+                    }
+                    Instruction::Store(register, data_location) => {
+                        if register.is_integer_register() {
+                            new_items.push(Instruction::Store(register.clone(), data_location.clone()).into());
+                        } else if register.is_float_register() {
+                            new_items.push(Instruction::FStore(register.clone(), data_location.clone()).into());
+                        } else if register.is_full_width_register() {
+                            new_items.push(Instruction::StoreD(register.clone(), data_location.clone()).into());
+                        }
+                    }
+                    Instruction::Sub(x, y, z) => {
+                        if x.is_float_register() {
+                            let mut operand1 = y.clone();
+                            let mut operand2 = z.clone();
+
+                            if !operand1.is_float_register() {
+                                new_items.push(Instruction::ConvertFFromI(Register::FT0, operand1).into());
+                                operand1 = Register::FT0;
+                            }
+
+                            if !operand2.is_float_register() {
+                                new_items.push(Instruction::ConvertFFromI(Register::FT1, operand2).into());
+                                operand2 = Register::FT1;
+                            }
+
+                            new_items.push(Instruction::FSub(x.clone(), operand1, operand2).into());
+                        } else {
+                            new_items.push(instruction.clone().into());
+                        }
+                    }
+                    Instruction::Seqz(x, y) => {
+                        if x.is_float_register() {
+                            new_items.push(Instruction::ConvertFIromF(Register::T0, x.clone()).into());
+                            new_items.push(Instruction::Seqz(Register::T0, y.clone()).into());
+                        } else {
+                            new_items.push(instruction.clone().into());
+                        }
+                    }
+                    Instruction::Snez(x, y) => {
+                        if x.is_float_register() {
+                            new_items.push(Instruction::ConvertFIromF(Register::T0, x.clone()).into());
+                            new_items.push(Instruction::Snez(Register::T0, y.clone()).into());
+                        } else {
+                            new_items.push(instruction.clone().into());
+                        }
+                    }
+                    _ => new_items.push(instruction.clone().into()),
+                },
+                _ => new_items.push(item.clone()),
+            }
+        }
+
+        new_items
     }
 
     pub fn build(ir_context: &'ir ir::IRContext<'input>) -> Vec<GeneratedCodeItem> {
@@ -940,12 +1190,14 @@ impl<'input, 'ir> CodeGenerator<'input, 'ir> {
 
         generator.initialize_stack();
 
-        generator.items.push(GeneratedCodeItem::Section(format!(".global {}", START_LABEL)));
+        generator.items.push(GeneratedCodeItem::Global(START_LABEL.to_owned()));
 
         for ir_item in &ir_context.items {
             generator.visit(ir_item);
         }
 
-        return generator.items;
+        let items = generator.generate_fixed_generated_items();
+
+        return items;
     }
 }
